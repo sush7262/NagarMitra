@@ -46,3 +46,6 @@ npm-debug.log*
 # Firebase
 .firebase/
 firebase-debug.log
+
+NAGARMITRA_BLUEPRINT.md
+storage.rules

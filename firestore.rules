@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Issues collection
+    match /issues/{issueId} {
+      allow read: if true; // Publicly readable for feed/map
+      // Only authenticated users can report an issue
+      allow create: if request.auth != null;
+      // Users can only update their own issues, or if updating the upvote count/supporters
+      // Backend agents will use Admin SDK which bypasses these rules
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.reporter_uid || 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvote_count', 'supporters'])
+      );
+      // Issues cannot be deleted
+      allow delete: if false;
+    }
+    
+    // Escalations collection (read-only for clients, written by backend)
+    match /escalations/{escalationId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    
+    // Officers collection
+    match /officers/{officerId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only backend or admin updates this
+    }
+  }
+}

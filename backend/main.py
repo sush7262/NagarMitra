@@ -36,10 +36,7 @@ async def health_check():
 
 
 # ---------------------------------------------------------------------------
-# Routers will be registered here as tasks progress
-# from backend.routers import analyze, issues, escalation, verification
-# app.include_router(analyze.router, prefix="/api")
-# app.include_router(issues.router, prefix="/api")
-# app.include_router(escalation.router, prefix="/api")
-# app.include_router(verification.router, prefix="/api")
+# Routers
 # ---------------------------------------------------------------------------
+from routers import analyze
+app.include_router(analyze.router)

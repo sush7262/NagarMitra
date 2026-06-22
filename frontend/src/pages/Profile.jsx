@@ -1,4 +1,6 @@
-import { Star, Shield, Search, Award } from 'lucide-react'
+import { Star, Shield, Search, Award, LogOut } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { useNavigate } from 'react-router-dom'
 
 const BADGES = [
   { icon: '🏆', label: 'First Report', earned: true },
@@ -8,10 +10,30 @@ const BADGES = [
 ]
 
 export default function Profile() {
+  const { user, userProfile, logout } = useAuth()
+  const navigate = useNavigate()
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login', { replace: true })
+  }
+
+  const displayName = user?.displayName || userProfile?.name || 'Citizen'
+  const displayEmail = user?.email || ''
+  const photoURL = user?.photoURL
+  const citizenScore = userProfile?.citizenScore ?? 0
   return (
     <div>
       <header className="app-bar">
         <span style={{ fontWeight: 800, fontSize: '1.0625rem' }}>My Profile</span>
+        <button
+          className="btn btn-ghost"
+          style={{ padding: '8px 10px', minHeight: 'auto', gap: 6, fontSize: '0.8125rem' }}
+          onClick={handleLogout}
+          id="btn-logout"
+        >
+          <LogOut size={16} /> Logout
+        </button>
       </header>
 
       <div className="page" style={{ paddingTop: 20 }}>
@@ -20,23 +42,36 @@ export default function Profile() {
           background: 'linear-gradient(135deg, var(--color-primary), #7C3AED)',
           borderRadius: 16, padding: '24px', marginBottom: 20, color: '#fff', textAlign: 'center',
         }}>
-          <div style={{
-            width: 72, height: 72, borderRadius: '50%',
-            background: 'rgba(255,255,255,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '2rem', margin: '0 auto 12px',
-            border: '3px solid rgba(255,255,255,0.4)',
-          }}>
-            👤
-          </div>
-          <div style={{ fontWeight: 800, fontSize: '1.25rem' }}>Rahul Sharma</div>
-          <div style={{ opacity: 0.8, fontSize: '0.85rem', marginBottom: 16 }}>rahul.sharma@gmail.com</div>
+          {/* Avatar */}
+          {photoURL ? (
+            <img
+              src={photoURL}
+              alt={displayName}
+              style={{
+                width: 72, height: 72, borderRadius: '50%',
+                border: '3px solid rgba(255,255,255,0.4)',
+                margin: '0 auto 12px', display: 'block', objectFit: 'cover',
+              }}
+            />
+          ) : (
+            <div style={{
+              width: 72, height: 72, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '2rem', margin: '0 auto 12px',
+              border: '3px solid rgba(255,255,255,0.4)',
+            }}>
+              {displayName[0]?.toUpperCase() || '👤'}
+            </div>
+          )}
+          <div style={{ fontWeight: 800, fontSize: '1.25rem' }}>{displayName}</div>
+          <div style={{ opacity: 0.8, fontSize: '0.85rem', marginBottom: 16 }}>{displayEmail}</div>
           <div style={{
             background: 'rgba(255,255,255,0.15)',
             borderRadius: 12, padding: '12px 20px',
             display: 'inline-block',
           }}>
-            <div style={{ fontSize: '2rem', fontWeight: 800 }}>135</div>
+            <div style={{ fontSize: '2rem', fontWeight: 800 }}>{citizenScore}</div>
             <div style={{ fontSize: '0.75rem', opacity: 0.85, fontWeight: 600 }}>⭐ CITIZEN SCORE</div>
           </div>
         </div>

@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, MapPin, ThumbsUp, Loader, AlertTriangle } from 'lucide-react'
-import { fetchIssueById, formatTimeAgo } from '../lib/issues'
+import { ArrowLeft, MapPin, ThumbsUp, Loader, AlertTriangle, Send } from 'lucide-react'
+import { 
+  fetchIssueById, formatTimeAgo, upvoteExistingIssue,
+  markIssueVerified, submitDispute, addComment, subscribeToComments, resolveIssueByOfficer
+} from '../lib/issues'
+import { useAuth } from '../context/AuthContext'
 
 const severityClass = (label) => {
   const map = { Critical: 'critical', High: 'high', Medium: 'medium', Low: 'low' }
@@ -52,6 +56,21 @@ export default function IssueDetail() {
   const [issue, setIssue] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [comments, setComments] = useState([])
+  const [newComment, setNewComment] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Dispute form state
+  const [showDisputeForm, setShowDisputeForm] = useState(false)
+  const [disputeDesc, setDisputeDesc] = useState('')
+  const [disputeFile, setDisputeFile] = useState(null)
+  const [isDisputing, setIsDisputing] = useState(false)
+
+  // Officer form state
+  const [afterPhoto, setAfterPhoto] = useState(null)
+  const [isResolving, setIsResolving] = useState(false)
+
+  const { user, userProfile } = useAuth()
 
   useEffect(() => {
     if (!id) return
@@ -63,7 +82,80 @@ export default function IssueDetail() {
       })
       .catch((err) => setError(err.message || 'Could not load issue.'))
       .finally(() => setLoading(false))
+
+    const unsubComments = subscribeToComments(id, (data) => setComments(data))
+    return () => unsubComments()
   }, [id])
+
+  const handleUpvote = async () => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    if (!issue.supporters?.includes(user.uid)) {
+      try {
+        await upvoteExistingIssue(issue.id, user.uid)
+        setIssue(prev => ({ ...prev, upvote_count: (prev.upvote_count || 0) + 1, supporters: [...(prev.supporters || []), user.uid] }))
+      } catch (err) {
+        console.error('Upvote failed:', err)
+      }
+    }
+  }
+
+  const handleVerify = async () => {
+    if (!user) return navigate('/login')
+    try {
+      await markIssueVerified(issue.id)
+      setIssue(prev => ({ ...prev, status: 'verified_resolved' }))
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleDisputeSubmit = async (e) => {
+    e.preventDefault()
+    if (!disputeDesc.trim() || !disputeFile) return
+    setIsDisputing(true)
+    try {
+      await submitDispute(issue.id, user, disputeDesc, disputeFile)
+      setIssue(prev => ({ ...prev, status: 'disputed' }))
+      setShowDisputeForm(false)
+    } catch (err) {
+      console.error(err)
+      setError('Failed to submit dispute. Try again.')
+    } finally {
+      setIsDisputing(false)
+    }
+  }
+
+  const handleOfficerResolve = async () => {
+    if (!afterPhoto) return
+    setIsResolving(true)
+    try {
+      await resolveIssueByOfficer(issue.id, user, afterPhoto)
+      setIssue(prev => ({ ...prev, status: 'resolved' }))
+    } catch (err) {
+      console.error(err)
+      setError('Failed to mark as resolved: ' + err.message)
+    } finally {
+      setIsResolving(false)
+    }
+  }
+
+  const handleAddComment = async (e) => {
+    e.preventDefault()
+    if (!user) return navigate('/login')
+    if (!newComment.trim()) return
+    setIsSubmitting(true)
+    try {
+      await addComment(issue.id, user, newComment.trim())
+      setNewComment('')
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   const photoUrl = issue?.photos?.before?.[0]
   const severityPct = issue ? Math.min(100, (issue.severity_score ?? 5) * 10) : 0
@@ -166,13 +258,48 @@ export default function IssueDetail() {
           </div>
 
           <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 16 }}>
-            Reported by <strong>{issue.reporter_name || 'Citizen'}</strong> · {formatTimeAgo(issue.created_at)}
+            Reported by <strong>{issue.reporter_name || 'Citizen'}</strong> <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>(Score: 120)</span> · {formatTimeAgo(issue.created_at)}
           </div>
 
-          <button className="btn btn-primary" style={{ width: '100%', marginBottom: 16 }} id="btn-upvote">
+          <button 
+            className="btn btn-primary" 
+            style={{ 
+              width: '100%', marginBottom: 16,
+              background: issue.supporters?.includes(user?.uid) ? 'var(--color-primary-dark)' : 'var(--color-primary)'
+            }} 
+            onClick={handleUpvote}
+          >
             <ThumbsUp size={18} />
-            Support this Issue · {issue.upvote_count ?? 0} citizens
+            {issue.supporters?.includes(user?.uid) ? 'You Supported This' : 'Support this Issue'} · {issue.upvote_count ?? 0} citizens
           </button>
+
+          {userProfile?.is_officer && (issue.status === 'open' || issue.status === 'in_progress') && (
+            <div className="card" style={{ padding: '16px', marginBottom: 16, border: '1px solid var(--color-primary)' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 8, color: 'var(--color-primary)' }}>
+                🛡️ Officer Action: Resolve Issue
+              </div>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginBottom: 12 }}>
+                As an officer, you can mark this issue as resolved. You MUST upload an after-photo as proof of completion.
+              </p>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>After-Photo Proof (Required)</label>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={e => setAfterPhoto(e.target.files[0])}
+                  style={{ fontSize: '0.8rem' }}
+                />
+              </div>
+              <button 
+                className="btn btn-primary" 
+                style={{ width: '100%' }} 
+                disabled={!afterPhoto || isResolving}
+                onClick={handleOfficerResolve}
+              >
+                {isResolving ? 'Resolving...' : '✅ Mark as Resolved'}
+              </button>
+            </div>
+          )}
 
           <div className="card" style={{ padding: '16px' }}>
             <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 16 }}>📋 Resolution Timeline</div>
@@ -199,6 +326,101 @@ export default function IssueDetail() {
                 </div>
               </div>
             ))}
+          </div>
+
+          {(issue.status === 'resolved' && (user?.uid === issue.reporter_uid || issue.supporters?.includes(user?.uid))) && (
+            <div className="card" style={{ padding: '16px', marginTop: 16, background: '#F0FDF4', border: '1px solid #86EFAC' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 8, color: '#166534' }}>Has this issue been fixed?</div>
+              <p style={{ fontSize: '0.8125rem', color: '#15803D', marginBottom: 16 }}>
+                The assigned officer has marked this issue as resolved. Please verify if the problem is fixed in reality.
+              </p>
+              
+              {!showDisputeForm ? (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-primary" style={{ flex: 1, background: '#16A34A', borderColor: '#16A34A' }} onClick={handleVerify}>
+                    ✅ Approve Resolution
+                  </button>
+                  {user?.uid === issue.reporter_uid && (
+                    <button className="btn btn-ghost" style={{ color: '#DC2626', background: '#FEF2F2' }} onClick={() => setShowDisputeForm(true)}>
+                      ❌ Dispute
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <form onSubmit={handleDisputeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12, background: '#fff', padding: 12, borderRadius: 8, border: '1px solid #FECACA' }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#B91C1C' }}>Submit a Dispute</div>
+                  <textarea 
+                    placeholder="Explain why this issue is not fixed..."
+                    value={disputeDesc}
+                    onChange={e => setDisputeDesc(e.target.value)}
+                    style={{ padding: 10, borderRadius: 6, border: '1px solid var(--color-border)', fontSize: '0.875rem', minHeight: 60, outline: 'none' }}
+                  />
+                  <div>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Upload Photo Proof (Required)</label>
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={e => setDisputeFile(e.target.files[0])}
+                      style={{ fontSize: '0.8rem' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                    <button type="submit" className="btn btn-primary" disabled={isDisputing || !disputeDesc.trim() || !disputeFile} style={{ flex: 1, background: '#DC2626', borderColor: '#DC2626' }}>
+                      {isDisputing ? 'Submitting...' : 'Submit Dispute'}
+                    </button>
+                    <button type="button" className="btn btn-ghost" onClick={() => setShowDisputeForm(false)}>Cancel</button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          <div className="card" style={{ padding: '16px', marginTop: 16, marginBottom: 32 }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 16 }}>💬 Comments & Updates</div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+              {comments.length === 0 ? (
+                <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', textAlign: 'center', padding: '16px 0' }}>
+                  No comments yet. Be the first to add an update!
+                </div>
+              ) : (
+                comments.map(c => (
+                  <div key={c.id} style={{ background: c.is_dispute ? '#FEF2F2' : (c.is_official_resolution ? '#F0FDF4' : '#F8FAFC'), border: c.is_dispute ? '1px solid #FECACA' : (c.is_official_resolution ? '1px solid #86EFAC' : 'none'), padding: '10px 12px', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: c.is_dispute ? '#B91C1C' : (c.is_official_resolution ? '#166534' : 'var(--color-text)') }}>
+                        {c.user_name} {c.is_dispute && '(Disputed)'} {c.is_official_resolution && '(Official)'}
+                      </span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{formatTimeAgo(c.created_at)}</span>
+                    </div>
+                    <div style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{c.text}</div>
+                    {c.photo_url && (
+                      <img src={c.photo_url} alt="Proof" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 8, marginTop: 8 }} />
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <form onSubmit={handleAddComment} style={{ display: 'flex', gap: 8 }}>
+              <input 
+                type="text" 
+                placeholder="Add an update..." 
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                style={{ 
+                  flex: 1, padding: '10px 12px', borderRadius: 8, 
+                  border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.875rem' 
+                }}
+              />
+              <button 
+                type="submit" 
+                className="btn btn-primary" 
+                disabled={isSubmitting || !newComment.trim()}
+                style={{ padding: '0 14px' }}
+              >
+                <Send size={18} />
+              </button>
+            </form>
           </div>
         </div>
       )}

@@ -7,7 +7,10 @@ import {
   filterIssues,
   computeStats,
   formatTimeAgo,
+  haversineMeters,
+  upvoteExistingIssue,
 } from '../lib/issues'
+import { useAuth } from '../context/AuthContext'
 
 const STATUS_TABS = ['All', 'Open', 'In Progress', 'Resolved']
 
@@ -53,7 +56,19 @@ export default function HomeFeed() {
   const [error, setError] = useState('')
   const [viewMode, setViewMode] = useState('list')
   const [statusFilter, setStatusFilter] = useState('All')
+  const [typeFilter, setTypeFilter] = useState('All')
   const [successMsg, setSuccessMsg] = useState(location.state?.successMsg || '')
+  const [userLocation, setUserLocation] = useState(null)
+  const { user } = useAuth()
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => console.log('Location disabled or error:', err)
+      )
+    }
+  }, [])
 
   useEffect(() => {
     if (location.state?.successMsg) {
@@ -77,8 +92,26 @@ export default function HomeFeed() {
     return unsub
   }, [])
 
-  const filtered = filterIssues(issues, statusFilter)
+  const filtered = filterIssues(issues, statusFilter).filter(i => 
+    typeFilter === 'All' ? true : i.issue_type === typeFilter
+  )
   const stats = computeStats(issues)
+
+  const handleUpvote = async (e, issue) => {
+    e.stopPropagation() // Prevent navigating to detail page
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    // Optimistic UI could be added here, but for now just call the DB
+    if (!issue.supporters?.includes(user.uid)) {
+      try {
+        await upvoteExistingIssue(issue.id, user.uid)
+      } catch (err) {
+        console.error('Upvote failed:', err)
+      }
+    }
+  }
 
   return (
     <div>
@@ -158,9 +191,10 @@ export default function HomeFeed() {
       <div style={{
         background: 'var(--color-surface)',
         borderBottom: '1px solid var(--color-border)',
-        padding: '0 16px',
+        padding: '8px 16px',
         display: 'flex',
-        gap: 4,
+        alignItems: 'center',
+        gap: 12,
         overflowX: 'auto',
       }}>
         {STATUS_TABS.map((tab) => (
@@ -168,13 +202,13 @@ export default function HomeFeed() {
             key={tab}
             onClick={() => setStatusFilter(tab)}
             style={{
-              padding: '12px 14px',
+              padding: '6px 10px',
               fontSize: '0.8125rem',
               fontWeight: 600,
-              color: statusFilter === tab ? 'var(--color-primary)' : 'var(--color-text-muted)',
-              background: 'none',
+              color: statusFilter === tab ? '#fff' : 'var(--color-text-muted)',
+              background: statusFilter === tab ? 'var(--color-primary)' : '#F1F5F9',
               border: 'none',
-              borderBottom: statusFilter === tab ? '2px solid var(--color-primary)' : '2px solid transparent',
+              borderRadius: 20,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
             }}
@@ -182,6 +216,28 @@ export default function HomeFeed() {
             {tab}
           </button>
         ))}
+        
+        <select 
+          value={typeFilter} 
+          onChange={(e) => setTypeFilter(e.target.value)}
+          style={{
+            marginLeft: 'auto',
+            padding: '6px 10px',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            borderRadius: 20,
+            border: '1px solid var(--color-border)',
+            background: '#fff',
+            cursor: 'pointer',
+            outline: 'none'
+          }}
+        >
+          <option value="All">All Types</option>
+          <option value="pothole">Pothole</option>
+          <option value="water_leak">Water Leak</option>
+          <option value="waste">Garbage</option>
+          <option value="streetlight">Streetlight</option>
+        </select>
       </div>
 
       {loading && (
@@ -264,19 +320,30 @@ export default function HomeFeed() {
                         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {issue.location?.address || 'Unknown location'}
                         </span>
-                        <span style={{ flexShrink: 0 }}>· {formatTimeAgo(issue.created_at)}</span>
+                        {(() => {
+                          if (userLocation && issue.location?.lat) {
+                            const dist = haversineMeters(userLocation.lat, userLocation.lng, issue.location.lat, issue.location.lng)
+                            const distStr = dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(1)}km`
+                            return <span style={{ flexShrink: 0, fontWeight: 600, color: 'var(--color-primary)' }}>· {distStr} away</span>
+                          }
+                          return <span style={{ flexShrink: 0 }}>· {formatTimeAgo(issue.created_at)}</span>
+                        })()}
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 6,
-                          background: 'var(--color-primary-light)',
-                          color: 'var(--color-primary)',
-                          borderRadius: 20, padding: '6px 14px',
-                          fontSize: '0.8125rem', fontWeight: 600,
-                        }}>
+                        <button 
+                          onClick={(e) => handleUpvote(e, issue)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            background: issue.supporters?.includes(user?.uid) ? 'var(--color-primary)' : 'var(--color-primary-light)',
+                            color: issue.supporters?.includes(user?.uid) ? '#fff' : 'var(--color-primary)',
+                            borderRadius: 20, padding: '6px 14px',
+                            fontSize: '0.8125rem', fontWeight: 600,
+                            border: 'none', cursor: 'pointer'
+                          }}
+                        >
                           👍 {issue.upvote_count ?? 0} Support
-                        </span>
+                        </button>
                         <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', textTransform: 'capitalize' }}>
                           {issue.issue_type?.replace('_', ' ')}
                         </span>

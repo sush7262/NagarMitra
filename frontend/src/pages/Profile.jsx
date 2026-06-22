@@ -1,6 +1,8 @@
-import { Star, Shield, Search, Award, LogOut } from 'lucide-react'
+import { Star, Shield, Search, Award, LogOut, Settings } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { doc, updateDoc } from 'firebase/firestore'
+import { db } from '../lib/firebase'
 
 const BADGES = [
   { icon: '🏆', label: 'First Report', earned: true },
@@ -22,6 +24,20 @@ export default function Profile() {
   const displayEmail = user?.email || ''
   const photoURL = user?.photoURL
   const citizenScore = userProfile?.citizenScore ?? 0
+  const isOfficer = userProfile?.is_officer === true
+
+  const toggleOfficerMode = async () => {
+    if (!user) return
+    const userRef = doc(db, 'users', user.uid)
+    await updateDoc(userRef, { 
+      is_officer: !isOfficer,
+      department: !isOfficer ? 'PWD' : null 
+    })
+    // Note: The UI might need a hard refresh to immediately show context changes unless we have a live listener on userProfile, 
+    // but a reload or manual refresh will pick it up since AuthContext fetches on mount. Let's just reload the page for simplicity.
+    window.location.reload()
+  }
+
   return (
     <div>
       <header className="app-bar">
@@ -131,6 +147,23 @@ export default function Profile() {
               <span style={{ fontWeight: 700, color: 'var(--color-success)' }}>{row.pts}</span>
             </div>
           ))}
+        </div>
+
+        {/* Developer Options (Mock Role) */}
+        <div className="card" style={{ padding: '16px', marginTop: 20, border: '1px solid var(--color-primary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: '0.9375rem', marginBottom: 12, color: 'var(--color-primary)' }}>
+            <Settings size={18} /> Developer Options
+          </div>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginBottom: 12 }}>
+            Use this to test the Officer Resolution Flow (Task 4.2). It will assign you to the PWD department.
+          </p>
+          <button 
+            className="btn btn-ghost" 
+            style={{ width: '100%', background: isOfficer ? '#FEE2E2' : '#F0FDF4', color: isOfficer ? '#991B1B' : '#166534', border: `1px solid ${isOfficer ? '#FECACA' : '#bbf7d0'}` }}
+            onClick={toggleOfficerMode}
+          >
+            {isOfficer ? 'Disable Officer Mode' : 'Enable Officer Mode (PWD)'}
+          </button>
         </div>
       </div>
     </div>

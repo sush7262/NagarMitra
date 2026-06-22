@@ -52,6 +52,12 @@ class SubmitIssueResponse(BaseModel):
     message: str
 
 
+class EscalationResponse(BaseModel):
+    processed: int
+    escalated: int
+    message: str
+
+
 # ── Haversine distance (meters) ────────────────────────────────────────────────
 
 def haversine_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -220,6 +226,106 @@ async def submit_issue(req: SubmitIssueRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save issue: {str(e)}")
+
+
+# ── Endpoint: run escalation ───────────────────────────────────────────────────
+
+def process_escalations() -> dict:
+    from datetime import datetime, timezone
+    db = get_db()
+    issues_ref = db.collection("issues")
+    
+    # Query open and in_progress
+    open_docs = list(issues_ref.where("status", "==", "open").stream())
+    prog_docs = list(issues_ref.where("status", "==", "in_progress").stream())
+    all_docs = open_docs + prog_docs
+    
+    now = datetime.now(timezone.utc)
+    processed = 0
+    escalated = 0
+    
+    thresholds = {
+        "Critical": 24,
+        "High": 48,
+        "Medium": 168,  # 7 days
+        "Low": 336      # 14 days
+    }
+    
+    for doc in all_docs:
+        processed += 1
+        data = doc.to_dict()
+        created_at = data.get("created_at")
+        if not created_at:
+            continue
+            
+        # Ensure timezone-aware comparison
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+            
+        hours_unresolved = (now - created_at).total_seconds() / 3600
+        severity = data.get("severity_label", "Medium")
+        threshold = thresholds.get(severity, 168)
+        
+        if hours_unresolved > threshold:
+            # Check cooldown: only escalate at most once every 24 hours
+            last_escalated = data.get("last_escalated_at")
+            if last_escalated:
+                if last_escalated.tzinfo is None:
+                    last_escalated = last_escalated.replace(tzinfo=timezone.utc)
+                hours_since_last = (now - last_escalated).total_seconds() / 3600
+                if hours_since_last < 24:
+                    continue  # Cooldown active
+            
+            # Action: Escalate
+            escalated += 1
+            doc_ref = doc.reference
+            
+            # Update Issue
+            doc_ref.update({
+                "escalation_count": _firestore_increment(1),
+                "last_escalated_at": now
+            })
+            
+            # Log to 'escalations' collection
+            db.collection("escalations").add({
+                "issue_id": doc.id,
+                "severity_label": severity,
+                "hours_unresolved": hours_unresolved,
+                "timestamp": now
+            })
+            
+            # Add to 'comments' timeline
+            doc_ref.collection("comments").add({
+                "text": f"⚠️ System Alert: This issue has been automatically escalated due to being unresolved for over {int(hours_unresolved)} hours.",
+                "user_name": "NagarMitra System",
+                "user_uid": "system",
+                "is_escalation": True,
+                "created_at": now
+            })
+            
+    return {"processed": processed, "escalated": escalated}
+
+
+@router.post("/run-escalation", response_model=EscalationResponse)
+async def run_escalation():
+    """
+    Background/cron task to find overdue issues and escalate them.
+    """
+    if not is_initialized():
+        raise HTTPException(
+            status_code=503,
+            detail="Firebase Admin SDK not configured."
+        )
+
+    try:
+        result = await _run_in_thread(process_escalations)
+        return EscalationResponse(
+            processed=result["processed"],
+            escalated=result["escalated"],
+            message=f"Escalation complete. Processed {result['processed']} issues, escalated {result['escalated']}."
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Escalation task failed: {str(e)}")
 
 
 # ── Firestore helpers (lazy import to avoid init-time errors) ──────────────────

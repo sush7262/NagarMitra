@@ -13,6 +13,7 @@ import {
   arrayUnion,
 } from 'firebase/firestore'
 import { db } from './firebase'
+import { uploadImage } from './storage'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
@@ -117,7 +118,7 @@ async function findDuplicateClient(issueType, lat, lng) {
   return null
 }
 
-async function upvoteExistingIssue(issueId, reporterUid) {
+export async function upvoteExistingIssue(issueId, reporterUid) {
   const issueRef = doc(db, 'issues', issueId)
   await updateDoc(issueRef, {
     upvote_count: increment(1),
@@ -266,4 +267,94 @@ export async function isBackendFirebaseReady() {
   } catch {
     return false
   }
+}
+
+// ── Issue Interactions (Task 3.2) ──────────────────────────────────────────────
+
+export async function markIssueVerified(issueId) {
+  const issueRef = doc(db, 'issues', issueId)
+  await updateDoc(issueRef, {
+    status: 'verified_resolved',
+    updated_at: serverTimestamp()
+  })
+}
+
+export async function submitDispute(issueId, user, description, photoFile) {
+  let photoUrl = null
+  if (photoFile) {
+    const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}`
+    const path = `issues/${user.uid}/disputes/${filename}`
+    photoUrl = await uploadImage(photoFile, path)
+  }
+
+  const issueRef = doc(db, 'issues', issueId)
+  await updateDoc(issueRef, {
+    status: 'disputed',
+    updated_at: serverTimestamp()
+  })
+
+  const commentsRef = collection(db, 'issues', issueId, 'comments')
+  await addDoc(commentsRef, {
+    text: description,
+    photo_url: photoUrl,
+    is_dispute: true,
+    user_uid: user.uid,
+    user_name: user.displayName || 'Citizen',
+    created_at: serverTimestamp()
+  })
+}
+
+export async function resolveIssueByOfficer(issueId, user, afterPhotoFile) {
+  if (!afterPhotoFile) throw new Error("After-photo is mandatory")
+  
+  const filename = `${Date.now()}_after_${Math.random().toString(36).substring(7)}`
+  const path = `issues/${user.uid}/resolutions/${filename}`
+  const photoUrl = await uploadImage(afterPhotoFile, path)
+
+  const issueRef = doc(db, 'issues', issueId)
+  const deadline = new Date(Date.now() + 48 * 60 * 60 * 1000) // +48 hours
+
+  await updateDoc(issueRef, {
+    status: 'resolved',
+    'photos.after': [photoUrl],
+    resolved_at: serverTimestamp(),
+    officer_uid: user.uid,
+    verification_deadline: deadline,
+    updated_at: serverTimestamp()
+  })
+
+  const commentsRef = collection(db, 'issues', issueId, 'comments')
+  await addDoc(commentsRef, {
+    text: "✅ Official Resolution: The assigned officer has marked this issue as resolved. Please review the attached proof photo.",
+    photo_url: photoUrl,
+    is_official_resolution: true,
+    user_uid: user.uid,
+    user_name: user.displayName || 'City Officer',
+    created_at: serverTimestamp()
+  })
+}
+
+export async function addComment(issueId, user, text) {
+  const commentsRef = collection(db, 'issues', issueId, 'comments')
+  await addDoc(commentsRef, {
+    text,
+    user_uid: user.uid,
+    user_name: user.displayName || 'Citizen',
+    created_at: serverTimestamp()
+  })
+}
+
+export function subscribeToComments(issueId, callback) {
+  const commentsRef = collection(db, 'issues', issueId, 'comments')
+  // We don't have complex indexes yet, so we will sort client side
+  return onSnapshot(commentsRef, (snapshot) => {
+    const comments = snapshot.docs.map(snap => ({ id: snap.id, ...snap.data() }))
+    // Sort by created_at ascending (oldest first)
+    comments.sort((a, b) => {
+      const timeA = a.created_at?.toMillis() || 0
+      const timeB = b.created_at?.toMillis() || 0
+      return timeA - timeB
+    })
+    callback(comments)
+  })
 }

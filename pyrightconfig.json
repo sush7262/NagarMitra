@@ -1,0 +1,12 @@
+{
+  "pythonPath": "C:\\Users\\HP\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+  "pythonVersion": "3.13",
+  "extraPaths": [
+    "backend"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "backend"
+    }
+  ]
+}

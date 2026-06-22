@@ -20,7 +20,7 @@ const SEVERITY_COLORS = {
   Low: { bg: '#F0FDF4', border: '#BBF7D0', text: '#15803D', dot: '#22C55E' },
 }
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'
 
 export default function AnalyzeIssue() {
   const { state } = useLocation()

@@ -5,6 +5,9 @@ import os
 
 load_dotenv()
 
+from services.firebase_service import init_firebase
+init_firebase()
+
 app = FastAPI(
     title="NagarMitra API",
     description="AI-Powered Civic Issue Resolution Backend",
@@ -32,7 +35,11 @@ async def root():
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    return {"status": "healthy"}
+    from services.firebase_service import is_initialized
+    return {
+        "status": "healthy",
+        "firebase_admin": is_initialized(),
+    }
 
 
 # ---------------------------------------------------------------------------

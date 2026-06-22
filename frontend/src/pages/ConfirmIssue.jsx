@@ -4,7 +4,7 @@ import { ChevronLeft, Send, Loader, AlertTriangle, CheckCircle } from 'lucide-re
 import { useAuth } from '../context/AuthContext'
 import { uploadImage } from '../lib/storage'
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'
 
 export default function ConfirmIssue() {
   const { state } = useLocation()
@@ -25,7 +25,7 @@ export default function ConfirmIssue() {
     setDuplicateMessage('')
 
     try {
-      // TASK 2.4: Check for duplicates
+      // 1. Check duplicates
       const checkRes = await fetch(`${BACKEND_URL}/api/check-duplicate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -38,7 +38,6 @@ export default function ConfirmIssue() {
 
       if (!checkRes.ok) {
         const err = await checkRes.json()
-        // If 503, Firebase admin isn't set up yet, which is expected for now
         if (checkRes.status === 503) {
            setError('Firebase service account not configured yet (Task 2.5 dependency). Duplicate check skipped.')
            setSubmitting(false)
@@ -50,15 +49,12 @@ export default function ConfirmIssue() {
       const checkData = await checkRes.json()
 
       if (checkData.is_duplicate) {
-        // Duplicate found! Stop submission and show message.
         setDuplicateMessage(checkData.message)
         setSubmitting(false)
         return
       }
 
-      // TASK 2.5: No duplicate, proceed to upload and save
-      
-      // 1. Upload photos to Firebase Storage
+      // 2. Upload photos
       const uploadedUrls = []
       for (const photo of photos) {
         if (!photo.file) continue
@@ -68,7 +64,7 @@ export default function ConfirmIssue() {
         uploadedUrls.push(url)
       }
 
-      // 2. Save issue to Firestore via backend
+      // 3. Save to backend
       const submitRes = await fetch(`${BACKEND_URL}/api/submit-issue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,9 +72,9 @@ export default function ConfirmIssue() {
           title: draft.title,
           description: draft.description,
           issue_type: draft.issueType,
-          severity_score: draft.severityScore,
-          severity_label: draft.severityLabel,
-          department: draft.department,
+          severity_score: draft.severityScore || 5,
+          severity_label: draft.severityLabel || 'Medium',
+          department: draft.department || 'Municipal',
           reporter_uid: user?.uid || 'anonymous',
           reporter_name: user?.displayName || 'Citizen',
           location: draft.location,
@@ -94,11 +90,14 @@ export default function ConfirmIssue() {
 
       const submitData = await submitRes.json()
       
-      // Success! Navigate to feed or dashboard
       navigate('/', { replace: true, state: { successMsg: submitData.message } })
       
     } catch (err) {
-      setError(err.message || 'Something went wrong.')
+      if (err.message.includes('Failed to fetch')) {
+        setError('Could not connect to backend server. Make sure FastAPI is running on port 8000.')
+      } else {
+        setError(err.message || 'Something went wrong.')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -173,7 +172,7 @@ export default function ConfirmIssue() {
             id="btn-final-submit"
           >
             {submitting ? (
-              <><Loader size={20} style={{ animation: 'spin 1s linear infinite' }} /> Checking Duplicates...</>
+              <><Loader size={20} style={{ animation: 'spin 1s linear infinite' }} /> Submitting…</>
             ) : (
               <><Send size={20} /> Submit Issue</>
             )}

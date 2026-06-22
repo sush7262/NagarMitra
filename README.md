@@ -70,11 +70,20 @@ npm run dev
 cd backend
 cp .env.example .env
 # Fill in your GEMINI_API_KEY and Firebase config in .env
+# Download serviceAccountKey.json — see backend/FIREBASE_SETUP.md
 python -m venv venv
 venv\Scripts\activate       # Windows
 # source venv/bin/activate  # Mac/Linux
 pip install -r requirements.txt
 uvicorn main:app --reload
+```
+
+Verify Firebase Admin: http://localhost:8000/health → `"firebase_admin": true`
+
+Deploy Firestore + Storage rules (from project root):
+
+```bash
+firebase deploy --only firestore:rules,storage
 ```
 
 ---

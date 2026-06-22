@@ -14,7 +14,7 @@ _api_key = os.getenv("GEMINI_API_KEY")
 # Initialize the client
 client = genai.Client(api_key=_api_key)
 
-MODEL_FLASH = "gemini-2.0-flash-exp"
+MODEL_FLASH = "gemini-1.5-flash"
 
 
 def get_client() -> genai.Client:

@@ -67,7 +67,7 @@ def haversine_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> floa
 
 # ── Duplicate detection logic ──────────────────────────────────────────────────
 
-async def find_duplicate(issue_type: str, lat: float, lng: float, radius_meters: float = 100) -> Optional[dict]:
+def find_duplicate(issue_type: str, lat: float, lng: float, radius_meters: float = 100) -> Optional[dict]:
     """
     Query Firestore for an open/in-progress issue of the same type within radius_meters.
     Returns the matching issue dict (with 'id') or None.

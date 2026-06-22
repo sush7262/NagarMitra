@@ -38,5 +38,6 @@ async def health_check():
 # ---------------------------------------------------------------------------
 # Routers
 # ---------------------------------------------------------------------------
-from routers import analyze
+from routers import analyze, issues
 app.include_router(analyze.router)
+app.include_router(issues.router)

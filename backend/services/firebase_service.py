@@ -1,6 +1,5 @@
 """
-Firebase Admin SDK Service
-Will be fully configured in Task 1.2 after Firebase project is created.
+Firebase Admin SDK Service — upgraded with proper initialization and helper functions.
 """
 import os
 import firebase_admin
@@ -10,11 +9,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 _app = None
+_db = None
 
 
 def init_firebase():
     """Initialize Firebase Admin SDK (call once on startup)."""
-    global _app
+    global _app, _db
     if _app:
         return _app
 
@@ -26,19 +26,32 @@ def init_firebase():
         _app = firebase_admin.initialize_app(cred, {
             "storageBucket": f"{project_id}.firebasestorage.app"
         })
+        _db = firestore.client()
+        print(f"[Firebase] Initialized for project: {project_id}")
     else:
-        # Running without credentials (dev mode / placeholder)
         print("[Firebase] WARNING: serviceAccountKey.json not found. Running in offline mode.")
+        print(f"[Firebase] Expected path: {key_path}")
         _app = None
+        _db = None
 
     return _app
 
 
 def get_db():
-    """Return Firestore client."""
-    return firestore.client()
+    """Return Firestore client. Raises if Firebase not initialized."""
+    if _db is None:
+        raise RuntimeError(
+            "Firebase not initialized. Please add serviceAccountKey.json to the backend folder "
+            "and set FIREBASE_SERVICE_ACCOUNT_KEY_PATH in backend/.env"
+        )
+    return _db
 
 
 def get_bucket():
     """Return Firebase Storage bucket."""
     return storage.bucket()
+
+
+def is_initialized() -> bool:
+    """Check if Firebase Admin SDK is ready."""
+    return _app is not None

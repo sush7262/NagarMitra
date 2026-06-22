@@ -1,15 +1,108 @@
-// ConfirmIssue — placeholder for Task 2.4 (Duplicate Detection) + Task 2.5 (Save to Firestore)
-// Will be fully implemented in Task 2.4.
+import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Send } from 'lucide-react'
+import { ChevronLeft, Send, Loader, AlertTriangle, CheckCircle } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { uploadImage } from '../lib/storage'
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
 export default function ConfirmIssue() {
   const { state } = useLocation()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const draft = state?.draft
   const photos = state?.photos || []
 
+  const [submitting, setSubmitting] = useState(false)
+  const [duplicateMessage, setDuplicateMessage] = useState('')
+  const [error, setError] = useState('')
+
   if (!draft) { navigate('/report', { replace: true }); return null }
+
+  const handleFinalSubmit = async () => {
+    setSubmitting(true)
+    setError('')
+    setDuplicateMessage('')
+
+    try {
+      // TASK 2.4: Check for duplicates
+      const checkRes = await fetch(`${BACKEND_URL}/api/check-duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issue_type: draft.issueType,
+          location: draft.location,
+          reporter_uid: user?.uid || 'anonymous',
+        }),
+      })
+
+      if (!checkRes.ok) {
+        const err = await checkRes.json()
+        // If 503, Firebase admin isn't set up yet, which is expected for now
+        if (checkRes.status === 503) {
+           setError('Firebase service account not configured yet (Task 2.5 dependency). Duplicate check skipped.')
+           setSubmitting(false)
+           return
+        }
+        throw new Error(err.detail || 'Duplicate check failed')
+      }
+
+      const checkData = await checkRes.json()
+
+      if (checkData.is_duplicate) {
+        // Duplicate found! Stop submission and show message.
+        setDuplicateMessage(checkData.message)
+        setSubmitting(false)
+        return
+      }
+
+      // TASK 2.5: No duplicate, proceed to upload and save
+      
+      // 1. Upload photos to Firebase Storage
+      const uploadedUrls = []
+      for (const photo of photos) {
+        if (!photo.file) continue
+        const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}`
+        const path = `issues/${user?.uid || 'anonymous'}/${filename}`
+        const url = await uploadImage(photo.file, path)
+        uploadedUrls.push(url)
+      }
+
+      // 2. Save issue to Firestore via backend
+      const submitRes = await fetch(`${BACKEND_URL}/api/submit-issue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: draft.title,
+          description: draft.description,
+          issue_type: draft.issueType,
+          severity_score: draft.severityScore,
+          severity_label: draft.severityLabel,
+          department: draft.department,
+          reporter_uid: user?.uid || 'anonymous',
+          reporter_name: user?.displayName || 'Citizen',
+          location: draft.location,
+          photos: { before: uploadedUrls },
+          ai_confidence: draft.aiConfidence || 0
+        }),
+      })
+
+      if (!submitRes.ok) {
+        const err = await submitRes.json()
+        throw new Error(err.detail || 'Submit failed')
+      }
+
+      const submitData = await submitRes.json()
+      
+      // Success! Navigate to feed or dashboard
+      navigate('/', { replace: true, state: { successMsg: submitData.message } })
+      
+    } catch (err) {
+      setError(err.message || 'Something went wrong.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div>
@@ -38,28 +131,56 @@ export default function ConfirmIssue() {
           </div>
         </div>
 
-        <div style={{
-          padding: '12px 14px',
-          background: '#FFFBEB', border: '1.5px solid #FDE68A',
-          borderRadius: 10, marginBottom: 20,
-          fontSize: '0.8rem', color: '#B45309',
-        }}>
-          ⚙️ <strong>Task 2.4 &amp; 2.5</strong> will wire up duplicate detection and Firestore save here.
-        </div>
+        {duplicateMessage && (
+          <div style={{
+            padding: '12px 14px',
+            background: '#F0FDF4', border: '1.5px solid #86EFAC',
+            borderRadius: 10, marginBottom: 20,
+            fontSize: '0.85rem', color: '#166534',
+            display: 'flex', gap: 10, alignItems: 'flex-start'
+          }}>
+            <CheckCircle size={18} color="#16A34A" style={{ marginTop: 2, flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Report Logged as Support!</div>
+              {duplicateMessage}
+            </div>
+          </div>
+        )}
 
-        <button
-          className="btn btn-primary"
-          style={{
-            width: '100%', fontSize: '1rem', minHeight: 52, gap: 10,
-            background: 'linear-gradient(135deg, #F97316, #EF4444)',
-            borderColor: 'transparent',
-          }}
-          onClick={() => navigate('/', { replace: true })}
-          id="btn-final-submit"
-        >
-          <Send size={20} /> Submit Issue
-        </button>
+        {error && (
+          <div style={{
+            padding: '12px 14px',
+            background: '#FEF2F2', border: '1px solid #FECACA',
+            borderRadius: 10, marginBottom: 20,
+            fontSize: '0.85rem', color: '#B91C1C',
+            display: 'flex', gap: 10, alignItems: 'flex-start'
+          }}>
+            <AlertTriangle size={18} color="#EF4444" style={{ marginTop: 2, flexShrink: 0 }} />
+            <div>{error}</div>
+          </div>
+        )}
+
+        {!duplicateMessage && (
+          <button
+            className="btn btn-primary"
+            style={{
+              width: '100%', fontSize: '1rem', minHeight: 52, gap: 10,
+              background: 'linear-gradient(135deg, #F97316, #EF4444)',
+              borderColor: 'transparent',
+            }}
+            onClick={handleFinalSubmit}
+            disabled={submitting}
+            id="btn-final-submit"
+          >
+            {submitting ? (
+              <><Loader size={20} style={{ animation: 'spin 1s linear infinite' }} /> Checking Duplicates...</>
+            ) : (
+              <><Send size={20} /> Submit Issue</>
+            )}
+          </button>
+        )}
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }

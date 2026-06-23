@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { MapPin, List, Map, Loader, CheckCircle, Search, Clock, ChevronLeft, ChevronRight, MessageCircle, ArrowUp } from 'lucide-react'
 import MapView from '../components/MapView'
 import {
@@ -51,6 +52,7 @@ const severityBarColor = (label) => {
 export default function HomeFeed() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { t } = useTranslation()
   const [issues, setIssues] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -122,12 +124,12 @@ export default function HomeFeed() {
       <header style={{ padding: '16px 16px 12px', background: '#FFFFFF', borderBottom: '1px solid var(--color-border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div>
-            <h1 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#16A34A', margin: 0 }}>NagarMitra</h1>
-            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: 0 }}>Siliguri Municipal Corporation</p>
+            <h1 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#16A34A', margin: 0 }}>{t('NagarMitra')}</h1>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: 0 }}>{t('Siliguri Municipal Corporation')}</p>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <h2 style={{ fontSize: '0.875rem', fontWeight: '600', color: '#16A34A', margin: 0 }}>5 Active Reports</h2>
-            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0 }}>Real-time updates</p>
+            <h2 style={{ fontSize: '0.875rem', fontWeight: '600', color: '#16A34A', margin: 0 }}>5 {t('Active Reports')}</h2>
+            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0 }}>{t('Real-time updates')}</p>
           </div>
         </div>
 
@@ -135,7 +137,7 @@ export default function HomeFeed() {
           <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
           <input
             type="text"
-            placeholder="Search by keyword or ward..."
+            placeholder={t('Search')}
             style={{
               width: '100%',
               padding: '10px 10px 10px 38px',

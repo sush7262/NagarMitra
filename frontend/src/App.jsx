@@ -10,21 +10,57 @@ import IssueDetail from './pages/IssueDetail'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import Login from './pages/Login'
+import LanguageSelect from './pages/LanguageSelect'
+import LocationRequest from './pages/LocationRequest'
+
+const RequireLanguage = ({ children }) => {
+  if (!localStorage.getItem('language')) {
+    return <Navigate to="/language" replace />
+  }
+  return children
+}
+
+const RequireLocation = ({ children }) => {
+  if (!localStorage.getItem('locationPermission')) {
+    return <Navigate to="/location-permission" replace />
+  }
+  return children
+}
 
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          {/* Public route */}
-          <Route path="/login" element={<Login />} />
+          {/* Language Selection Route */}
+          <Route path="/language" element={<LanguageSelect />} />
 
-          {/* Protected routes — require auth */}
+          {/* Public route */}
+          <Route path="/login" element={
+            <RequireLanguage>
+              <Login />
+            </RequireLanguage>
+          } />
+
+          {/* Location Request Route - Requires Login but NOT Location */}
+          <Route path="/location-permission" element={
+            <RequireLanguage>
+              <PrivateRoute>
+                <LocationRequest />
+              </PrivateRoute>
+            </RequireLanguage>
+          } />
+
+          {/* Protected routes — require auth AND location */}
           <Route
             element={
-              <PrivateRoute>
-                <Layout />
-              </PrivateRoute>
+              <RequireLanguage>
+                <RequireLocation>
+                  <PrivateRoute>
+                    <Layout />
+                  </PrivateRoute>
+                </RequireLocation>
+              </RequireLanguage>
             }
           >
             <Route index element={<HomeFeed />} />

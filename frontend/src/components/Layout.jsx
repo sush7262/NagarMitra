@@ -1,8 +1,10 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { Home, BarChart2, User, Plus, Map } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 export default function Layout() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   return (
     <div className="w-full bg-[var(--bg-primary)]">
@@ -21,7 +23,7 @@ export default function Layout() {
             className={({ isActive }) => `flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-colors ${isActive ? 'bg-[#E6F4EA] text-[#059669]' : 'text-slate-500 hover:text-slate-800'}`}
           >
             <Home size={22} strokeWidth={1.5} />
-            <span className="text-[0.65rem] font-medium mt-1">Home</span>
+            <span className="text-[0.65rem] font-medium mt-1">{t('Home')}</span>
           </NavLink>
 
           <NavLink
@@ -29,7 +31,7 @@ export default function Layout() {
             className={({ isActive }) => `flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-colors ${isActive ? 'bg-[#E6F4EA] text-[#059669]' : 'text-slate-500 hover:text-slate-800'}`}
           >
             <BarChart2 size={22} strokeWidth={1.5} />
-            <span className="text-[0.65rem] font-medium mt-1">Analytics</span>
+            <span className="text-[0.65rem] font-medium mt-1">{t('Analytics')}</span>
           </NavLink>
 
           {/* Central Plus Button */}
@@ -48,7 +50,7 @@ export default function Layout() {
             className={({ isActive }) => `flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-colors ${isActive ? 'bg-[#E6F4EA] text-[#059669]' : 'text-slate-500 hover:text-slate-800'}`}
           >
             <Map size={22} strokeWidth={1.5} />
-            <span className="text-[0.65rem] font-medium mt-1">Map</span>
+            <span className="text-[0.65rem] font-medium mt-1">{t('Map')}</span>
           </NavLink>
 
           <NavLink
@@ -56,7 +58,7 @@ export default function Layout() {
             className={({ isActive }) => `flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-colors ${isActive ? 'bg-[#E6F4EA] text-[#059669]' : 'text-slate-500 hover:text-slate-800'}`}
           >
             <User size={22} strokeWidth={1.5} />
-            <span className="text-[0.65rem] font-medium mt-1">Profile</span>
+            <span className="text-[0.65rem] font-medium mt-1">{t('Profile')}</span>
           </NavLink>
 
         </div>

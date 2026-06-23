@@ -15,7 +15,9 @@ const resources = {
       "Siliguri Municipal Corporation": "Siliguri Municipal Corporation",
       "Active Reports": "Active Reports",
       "Real-time updates": "Real-time updates",
-      "Search": "Search by keyword or ward..."
+      "Search": "Search by keyword or ward...",
+      "Municipal Corporation": "Municipal Corporation",
+      "Locating...": "Locating..."
     }
   },
   hi: {
@@ -30,7 +32,9 @@ const resources = {
       "Siliguri Municipal Corporation": "सिलीगुड़ी नगर निगम",
       "Active Reports": "सक्रिय रिपोर्ट",
       "Real-time updates": "रियल-टाइम अपडेट",
-      "Search": "कीवर्ड या वार्ड से खोजें..."
+      "Search": "कीवर्ड या वार्ड से खोजें...",
+      "Municipal Corporation": "नगर निगम",
+      "Locating...": "स्थान खोजा जा रहा है..."
     }
   },
   bn: {
@@ -45,7 +49,9 @@ const resources = {
       "Siliguri Municipal Corporation": "শিলিগুড়ি পৌরনিগম",
       "Active Reports": "সক্রিয় রিপোর্ট",
       "Real-time updates": "রিয়েল-টাইম আপডেট",
-      "Search": "কীওয়ার্ড বা ওয়ার্ড দ্বারা খুঁজুন..."
+      "Search": "কীওয়ার্ড বা ওয়ার্ড দ্বারা খুঁজুন...",
+      "Municipal Corporation": "পৌরনিগম",
+      "Locating...": "স্থান খোঁজা হচ্ছে..."
     }
   },
   sat: { // Santhali (placeholder translations for demonstration)
@@ -60,7 +66,9 @@ const resources = {
       "Siliguri Municipal Corporation": "ᱥᱤᱞᱤᱜᱩᱲᱤ ᱢᱩᱱᱤᱥᱤᱯᱟᱞ ᱠᱚᱨᱯᱚᱨᱮᱥᱚᱱ",
       "Active Reports": "ᱮᱠᱴᱤᱵᱷ ᱨᱤᱯᱚᱨᱴ",
       "Real-time updates": "ᱨᱤᱭᱮᱞ-ᱴᱟᱭᱤᱢ ᱟᱯᱰᱮᱴ",
-      "Search": "ᱥᱮᱸᱫᱽᱨᱟ..."
+      "Search": "ᱥᱮᱸᱫᱽᱨᱟ...",
+      "Municipal Corporation": "ᱢᱩᱱᱤᱥᱤᱯᱟᱞ ᱠᱚᱨᱯᱚᱨᱮᱥᱚᱱ",
+      "Locating...": "ᱥᱮᱸᱫᱽᱨᱟ..."
     }
   },
   xnr: { // Nagpuri (placeholder translations for demonstration)
@@ -75,7 +83,9 @@ const resources = {
       "Siliguri Municipal Corporation": "सिलीगुड़ी नगर निगम",
       "Active Reports": "सक्रिय रिपोर्ट",
       "Real-time updates": "तुरंत अपडेट",
-      "Search": "खोजु..."
+      "Search": "खोजु...",
+      "Municipal Corporation": "नगर निगम",
+      "Locating...": "खोजत हे..."
     }
   }
 };

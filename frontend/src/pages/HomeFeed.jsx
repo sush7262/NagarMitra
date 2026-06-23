@@ -57,9 +57,26 @@ export default function HomeFeed() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [viewMode, setViewMode] = useState(location.pathname === '/map' ? 'map' : 'list')
+  const [cityName, setCityName] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [typeFilter, setTypeFilter] = useState('All')
   const [successMsg, setSuccessMsg] = useState(location.state?.successMsg || '')
+
+  useEffect(() => {
+    const lat = localStorage.getItem('userLat')
+    const lng = localStorage.getItem('userLng')
+    if (lat && lng) {
+      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.address) {
+            const city = data.address.city || data.address.town || data.address.state_district || 'Unknown Location'
+            setCityName(city)
+          }
+        })
+        .catch(err => console.error("Error fetching location:", err))
+    }
+  }, [])
 
   useEffect(() => {
     setViewMode(location.pathname === '/map' ? 'map' : 'list')
@@ -98,10 +115,44 @@ export default function HomeFeed() {
     return unsub
   }, [])
 
-  const filtered = filterIssues(issues, statusFilter).filter(i =>
-    typeFilter === 'All' ? true : i.issue_type === typeFilter
-  )
+  const latStr = localStorage.getItem('userLat')
+  const lngStr = localStorage.getItem('userLng')
+  const userLat = latStr ? parseFloat(latStr) : null
+  const userLng = lngStr ? parseFloat(lngStr) : null
+  const FILTER_RADIUS_KM = 10 // Only show issues within 10km
+
+  const filteredRaw = filterIssues(issues, statusFilter)
+    .filter(i => typeFilter === 'All' ? true : i.issue_type === typeFilter)
+    .filter(i => {
+      if (i.is_global) return true // Show global issues everywhere
+      if (!userLat || !userLng) return true // Show all if user location not set
+      if (!i.location?.lat || !i.location?.lng) return false // Hide issues with missing location
+      const dist = haversineMeters(userLat, userLng, i.location.lat, i.location.lng)
+      return dist <= FILTER_RADIUS_KM * 1000
+    })
+
+  // Teleport global issues to the user's current city so they show up on the map!
+  const filtered = filteredRaw.map(i => {
+    if (i.is_global && userLat && userLng) {
+      // Small deterministic offset based on issue ID so they don't stack perfectly on top of user
+      const idHash = i.id ? i.id.charCodeAt(0) + i.id.charCodeAt(1) : 0
+      const latOffset = ((idHash % 10) - 5) * 0.003
+      const lngOffset = (((idHash * 3) % 10) - 5) * 0.003
+      return {
+        ...i,
+        location: {
+          ...i.location,
+          lat: userLat + latOffset + 0.002,
+          lng: userLng + lngOffset + 0.002,
+          address: cityName ? `${cityName} (Auto-detected)` : 'Auto-detected Location'
+        }
+      }
+    }
+    return i
+  })
+
   const stats = computeStats(issues)
+
 
   const handleUpvote = async (e, issue) => {
     e.stopPropagation() // Prevent navigating to detail page
@@ -125,7 +176,9 @@ export default function HomeFeed() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div>
             <h1 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#16A34A', margin: 0 }}>{t('NagarMitra')}</h1>
-            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: 0 }}>{t('Siliguri Municipal Corporation')}</p>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: 0 }}>
+              {cityName ? `${cityName} ${t('Municipal Corporation')}` : t('Locating...')}
+            </p>
           </div>
           <div style={{ textAlign: 'right' }}>
             <h2 style={{ fontSize: '0.875rem', fontWeight: '600', color: '#16A34A', margin: 0 }}>5 {t('Active Reports')}</h2>

@@ -4,7 +4,7 @@ POST /api/check-duplicate — check if similar issue exists within 100m before s
 POST /api/submit-issue   — full submit: duplicate check → save to Firestore (Task 2.5)
 """
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -434,6 +434,7 @@ async def verify_resolution(req: VerifyResolutionRequest):
         explanation=explanation,
         message="Verification complete"
     )
+
 
 
 # ── Firestore helpers (lazy import to avoid init-time errors) ──────────────────

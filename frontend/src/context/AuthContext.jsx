@@ -40,6 +40,21 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    // Check for officer session first
+    const officerSessionStr = localStorage.getItem('officer_session')
+    if (officerSessionStr) {
+      try {
+        const officerData = JSON.parse(officerSessionStr)
+        setUser({ uid: officerData.officer_id, is_custom_officer: true })
+        setUserProfile(officerData)
+        setLoading(false)
+        return // Bypass firebase auth listener if officer is logged in
+      } catch (e) {
+        console.error("Invalid officer session", e)
+        localStorage.removeItem('officer_session')
+      }
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser)
@@ -96,7 +111,10 @@ export function AuthProvider({ children }) {
 
   // Sign-out
   const logout = async () => {
+    localStorage.removeItem('officer_session')
     await signOut(auth)
+    setUser(null)
+    setUserProfile(null)
   }
 
   const value = {

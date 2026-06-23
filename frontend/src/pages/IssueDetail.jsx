@@ -136,7 +136,7 @@ export default function IssueDetail() {
     if (!afterPhoto) return
     setIsResolving(true)
     try {
-      await resolveIssueByOfficer(issue.id, user, afterPhoto)
+      await resolveIssueByOfficer(issue.id, user, userProfile, afterPhoto)
       setIssue(prev => ({ ...prev, status: 'resolved' }))
     } catch (err) {
       console.error(err)

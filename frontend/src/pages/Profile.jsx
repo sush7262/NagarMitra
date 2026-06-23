@@ -47,16 +47,8 @@ export default function Profile() {
     return () => unsub()
   }, [user])
 
-  const toggleOfficerMode = async () => {
-    if (!user) return
-    const userRef = doc(db, 'users', user.uid)
-    await updateDoc(userRef, { 
-      is_officer: !isOfficer,
-      department: !isOfficer ? 'PWD' : null 
-    })
-    // Note: The UI might need a hard refresh to immediately show context changes unless we have a live listener on userProfile, 
-    // but a reload or manual refresh will pick it up since AuthContext fetches on mount. Let's just reload the page for simplicity.
-    window.location.reload()
+  const goToOfficerLogin = () => {
+    navigate('/officer-login')
   }
 
   return (
@@ -210,20 +202,17 @@ export default function Profile() {
           )}
         </div>
 
-        {/* Developer Options (Mock Role) */}
-        <div className="card" style={{ padding: '16px', marginTop: 20, border: '1px solid var(--color-primary)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: '0.9375rem', marginBottom: 12, color: 'var(--color-primary)' }}>
-            <Settings size={18} /> Developer Options
-          </div>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginBottom: 12 }}>
-            Use this to test the Officer Resolution Flow (Task 4.2). It will assign you to the PWD department.
-          </p>
+        {/* Departmental Login Section */}
+        <div style={{ marginTop: 32, padding: 24, background: '#F8FAFC', borderRadius: 16, textAlign: 'center' }}>
+          <Shield size={32} color="#64748B" style={{ margin: '0 auto 12px' }} />
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#334155', marginBottom: 8 }}>Authorized Personnel</h3>
+          <p style={{ fontSize: '0.8125rem', color: '#64748B', marginBottom: 16 }}>Login to manage issues and resolutions for your department.</p>
           <button 
             className="btn btn-ghost" 
-            style={{ width: '100%', background: isOfficer ? '#FEE2E2' : '#F0FDF4', color: isOfficer ? '#991B1B' : '#166534', border: `1px solid ${isOfficer ? '#FECACA' : '#bbf7d0'}` }}
-            onClick={toggleOfficerMode}
+            onClick={goToOfficerLogin}
+            style={{ border: '1px solid #CBD5E1', color: '#475569', background: '#fff' }}
           >
-            {isOfficer ? 'Disable Officer Mode' : 'Enable Officer Mode (PWD)'}
+            Departmental Login
           </button>
         </div>
       </div>

@@ -10,6 +10,7 @@ import IssueDetail from './pages/IssueDetail'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import Login from './pages/Login'
+import OfficerLogin from './pages/OfficerLogin'
 import LanguageSelect from './pages/LanguageSelect'
 import LocationRequest from './pages/LocationRequest'
 
@@ -39,6 +40,11 @@ function App() {
           <Route path="/login" element={
             <RequireLanguage>
               <Login />
+            </RequireLanguage>
+          } />
+          <Route path="/officer-login" element={
+            <RequireLanguage>
+              <OfficerLogin />
             </RequireLanguage>
           } />
 

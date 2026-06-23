@@ -333,8 +333,12 @@ export async function submitDispute(issueId, user, description, file) {
   }
 }
 
-export async function resolveIssueByOfficer(issueId, user, afterPhotoFile) {
+export async function resolveIssueByOfficer(issueId, user, userProfile, afterPhotoFile) {
   if (!afterPhotoFile) throw new Error("After-photo is mandatory")
+  
+  const officerName = userProfile?.name || user?.displayName || 'City Officer'
+  const officerDept = userProfile?.department || 'Unknown Department'
+  const officerId = userProfile?.officer_id || user?.uid || 'Unknown ID'
   
   const filename = `${Date.now()}_after_${Math.random().toString(36).substring(7)}`
   const path = `issues/${user.uid}/resolutions/${filename}`
@@ -347,26 +351,28 @@ export async function resolveIssueByOfficer(issueId, user, afterPhotoFile) {
     status: 'resolved',
     'photos.after': [photoUrl],
     resolved_at: serverTimestamp(),
-    officer_uid: user.uid,
+    officer_uid: officerId,
+    resolved_by_name: officerName,
+    resolved_by_dept: officerDept,
     verification_deadline: deadline,
     updated_at: serverTimestamp()
   })
 
   // Track officer total resolutions (Task 4.4)
-  const officerRef = doc(db, 'officers', user.uid)
+  const officerRef = doc(db, 'officers', officerId)
   await setDoc(officerRef, {
-    name: user.displayName || 'City Officer',
-    department: 'PWD', // Mock department
+    name: officerName,
+    department: officerDept,
     total_resolutions: increment(1)
   }, { merge: true })
 
   const commentsRef = collection(db, 'issues', issueId, 'comments')
   await addDoc(commentsRef, {
-    text: "✅ Official Resolution: The assigned officer has marked this issue as resolved. Please review the attached proof photo.",
+    text: `✅ Official Resolution: The assigned officer (${officerName} - ${officerDept}) has marked this issue as resolved. Please review the attached proof photo.`,
     photo_url: photoUrl,
     is_official_resolution: true,
-    user_uid: user.uid,
-    user_name: user.displayName || 'City Officer',
+    user_uid: officerId,
+    user_name: officerName,
     created_at: serverTimestamp()
   })
 }

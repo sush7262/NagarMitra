@@ -1,0 +1,86 @@
+/* 
+NagarMitra UI Redesign Design System
+Custom CSS variables and specific CSS animations 
+*/
+
+:root {
+  /* Colors */
+  --bg-primary: #0A0F1E;        /* Deep navy black — main background */
+  --bg-secondary: #0F1629;      /* Slightly lighter — card backgrounds */
+  --bg-tertiary: #141D35;       /* Elevated surfaces, modals */
+  --bg-glass: rgba(255,255,255,0.04);  /* Glassmorphism surfaces */
+
+  --accent-blue: #2563EB;       /* Primary action — report button, CTAs */
+  --accent-blue-glow: #3B82F6;  /* Hover states, glows */
+  --accent-orange: #F97316;     /* Secondary accent — warnings, badges */
+  --accent-green: #10B981;      /* Success, verified, resolved */
+  --accent-red: #EF4444;        /* Critical, disputed, danger */
+  --accent-amber: #F59E0B;      /* Medium severity, pending */
+  --accent-purple: #8B5CF6;     /* Gamification, badges, special */
+
+  /* Gradients */
+  --gradient-hero: linear-gradient(135deg, #1E3A8A 0%, #1E1B4B 50%, #0A0F1E 100%);
+  --gradient-card: linear-gradient(145deg, #0F1629, #141D35);
+  --gradient-blue: linear-gradient(135deg, #1D4ED8, #7C3AED);
+  --gradient-orange: linear-gradient(135deg, #EA580C, #DC2626);
+  --gradient-success: linear-gradient(135deg, #059669, #0891B2);
+
+  /* Typography Colors */
+  --text-primary: #F1F5F9;      /* Main readable text */
+  --text-secondary: #94A3B8;    /* Subtitles, metadata */
+  --text-muted: #475569;        /* Placeholder, disabled */
+
+  /* Borders */
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-active: rgba(37,99,235,0.5);
+
+  /* Shadows */
+  --shadow-card: 0 4px 24px rgba(0,0,0,0.4);
+  --shadow-glow-blue: 0 0 20px rgba(37,99,235,0.3);
+  --shadow-glow-red: 0 0 20px rgba(239,68,68,0.3);
+  --shadow-glow-green: 0 0 20px rgba(16,185,129,0.3);
+}
+
+/* Glassmorphism utility */
+.glass-card {
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+}
+
+/* CSS Animations */
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+@keyframes float-up {
+  0% { transform: translateY(20px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes severity-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes gradient-border {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Skeleton loader with dark theme */
+.skeleton-dark {
+  background: linear-gradient(90deg, #0F1629 25%, #141D35 50%, #0F1629 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}

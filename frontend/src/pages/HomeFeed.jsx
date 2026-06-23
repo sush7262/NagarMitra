@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { MapPin, List, Map, Loader, CheckCircle } from 'lucide-react'
+import { MapPin, List, Map, Loader, CheckCircle, Search, Clock, ChevronLeft, ChevronRight, MessageCircle, ArrowUp } from 'lucide-react'
 import MapView from '../components/MapView'
 import {
   subscribeToIssues,
@@ -54,10 +54,14 @@ export default function HomeFeed() {
   const [issues, setIssues] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [viewMode, setViewMode] = useState('list')
+  const [viewMode, setViewMode] = useState(location.pathname === '/map' ? 'map' : 'list')
   const [statusFilter, setStatusFilter] = useState('All')
   const [typeFilter, setTypeFilter] = useState('All')
   const [successMsg, setSuccessMsg] = useState(location.state?.successMsg || '')
+
+  useEffect(() => {
+    setViewMode(location.pathname === '/map' ? 'map' : 'list')
+  }, [location.pathname])
   const [userLocation, setUserLocation] = useState(null)
   const { user } = useAuth()
 
@@ -92,7 +96,7 @@ export default function HomeFeed() {
     return unsub
   }, [])
 
-  const filtered = filterIssues(issues, statusFilter).filter(i => 
+  const filtered = filterIssues(issues, statusFilter).filter(i =>
     typeFilter === 'All' ? true : i.issue_type === typeFilter
   )
   const stats = computeStats(issues)
@@ -115,41 +119,36 @@ export default function HomeFeed() {
 
   return (
     <div>
-      <header className="app-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 8,
-            background: 'var(--color-primary)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <MapPin size={18} color="#fff" strokeWidth={2.5} />
-          </div>
+      <header style={{ padding: '16px 16px 12px', background: '#FFFFFF', borderBottom: '1px solid var(--color-border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div>
-            <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-text)', lineHeight: 1.1 }}>NagarMitra</div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
-              {issues.length > 0 ? `${issues.length} issues nearby` : 'Your city'}
-            </div>
+            <h1 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#16A34A', margin: 0 }}>NagarMitra</h1>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: 0 }}>Siliguri Municipal Corporation</p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <h2 style={{ fontSize: '0.875rem', fontWeight: '600', color: '#16A34A', margin: 0 }}>5 Active Reports</h2>
+            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: 0 }}>Real-time updates</p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button
-            className={`btn btn-ghost ${viewMode === 'list' ? 'active' : ''}`}
-            style={{ padding: '8px 10px', minHeight: 'auto' }}
-            onClick={() => setViewMode('list')}
-            aria-label="List view"
-          >
-            <List size={18} />
-          </button>
-          <button
-            className={`btn btn-ghost ${viewMode === 'map' ? 'active' : ''}`}
-            style={{ padding: '8px 10px', minHeight: 'auto' }}
-            onClick={() => setViewMode('map')}
-            aria-label="Map view"
-          >
-            <Map size={18} />
-          </button>
+        <div style={{ position: 'relative', marginBottom: '12px' }}>
+          <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+          <input
+            type="text"
+            placeholder="Search by keyword or ward..."
+            style={{
+              width: '100%',
+              padding: '10px 10px 10px 38px',
+              borderRadius: '8px',
+              border: '1px solid var(--color-border)',
+              fontSize: '0.875rem',
+              outline: 'none',
+              background: '#F8FAFC'
+            }}
+          />
         </div>
+
+
       </header>
 
       {successMsg && (
@@ -165,32 +164,10 @@ export default function HomeFeed() {
         </div>
       )}
 
-      <div style={{
-        background: 'var(--color-primary)',
-        padding: '16px',
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr 1fr',
-        gap: 0,
-      }}>
-        {[
-          { label: 'Reported', value: stats.reported },
-          { label: 'In Progress', value: stats.inProgress },
-          { label: 'Resolved', value: stats.resolved },
-        ].map((stat, i) => (
-          <div key={i} style={{
-            textAlign: 'center',
-            padding: '0 8px',
-            borderRight: i < 2 ? '1px solid rgba(255,255,255,0.2)' : 'none',
-          }}>
-            <div style={{ fontSize: '1.375rem', fontWeight: 800, color: '#fff' }}>{stat.value}</div>
-            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.75)', fontWeight: 500 }}>{stat.label}</div>
-          </div>
-        ))}
-      </div>
 
-      <div style={{
+
+      <div className="my-6 py-3 border-y border-slate-800/50" style={{
         background: 'var(--color-surface)',
-        borderBottom: '1px solid var(--color-border)',
         padding: '8px 16px',
         display: 'flex',
         alignItems: 'center',
@@ -216,9 +193,9 @@ export default function HomeFeed() {
             {tab}
           </button>
         ))}
-        
-        <select 
-          value={typeFilter} 
+
+        <select
+          value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
           style={{
             marginLeft: 'auto',
@@ -285,68 +262,86 @@ export default function HomeFeed() {
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="flex flex-col gap-6">
               {filtered.map((issue, idx) => {
                 const thumb = issue.photos?.before?.[0]
                 return (
-                  <div
-                    key={issue.id}
-                    className="card fade-in"
-                    style={{ cursor: 'pointer', animationDelay: `${idx * 0.07}s`, overflow: 'hidden' }}
-                    onClick={() => navigate(`/issue/${issue.id}`)}
-                  >
-                    <div style={{ height: 4, background: severityBarColor(issue.severity_label) }} />
+                  <div key={issue.id} style={{
+                    background: '#FFFFFF',
+                    borderRadius: '12px',
+                    border: '1px solid #E2E8F0',
+                    overflow: 'hidden',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                  }}>
+                    {/* Location Header */}
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <MapPin size={16} color="#64748B" />
+                        <span style={{ fontWeight: '800', fontSize: '1.00rem', color: '#0F172A' }}>
+                          {issue.location?.address?.split(',')[0] || 'Unknown Location'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem', fontWeight: '700', color: '#475569', paddingLeft: '24px' }}>
+                        <span>
+                          {issue.location?.address?.split(',')[1]?.trim() || 'Siliguri'} •
+                          {(() => {
+                            if (userLocation && issue.location?.lat) {
+                              const dist = haversineMeters(userLocation.lat, userLocation.lng, issue.location.lat, issue.location.lng)
+                              return ` ${(dist / 1000).toFixed(1)}km away`
+                            }
+                            return ' 0.3km away' // fallback
+                          })()}
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock size={12} />
+                          {formatTimeAgo(issue.created_at)}
+                        </span>
+                      </div>
+                    </div>
 
+                    {/* Content */}
+                    <div style={{ padding: '16px', cursor: 'pointer' }} onClick={() => navigate(`/issue/${issue.id}`)}>
+                      <h3 style={{ margin: '0 0 6px 0', fontSize: '1rem', fontWeight: '600', color: '#0F172A' }}>
+                        {issue.title}
+                      </h3>
+                      <p style={{ margin: 0, fontSize: '0.875rem', color: '#475569', lineHeight: '1.5' }}>
+                        {issue.description || 'Deep pothole near Mahabirsthan causing severe traffic disruption and vehicle damage.'}
+                      </p>
+                    </div>
+
+                    {/* Image with Carousel */}
                     {thumb && (
-                      <img
-                        src={thumb}
-                        alt={issue.title}
-                        style={{ width: '100%', height: 140, objectFit: 'cover' }}
-                      />
+                      <div style={{ position: 'relative', width: '100%', height: '200px' }}>
+                        <img src={thumb} alt={issue.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <button style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                          <ChevronLeft size={20} />
+                        </button>
+                        <button style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                          <ChevronRight size={20} />
+                        </button>
+                      </div>
                     )}
 
-                    <div style={{ padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-                        <span className={severityClass(issue.severity_label)}>{issue.severity_label}</span>
-                        <span className={statusClass(issue.status)}>{statusLabel(issue.status)}</span>
+                    {/* Footer Actions */}
+                    <div style={{ padding: '16px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                      <button
+                        onClick={(e) => handleUpvote(e, issue)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#FFFFFF', color: '#475569', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer' }}
+                      >
+                        <ArrowUp size={16} /> {issue.upvote_count ?? 0}
+                      </button>
+
+                      <button style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#FFFFFF', color: '#475569', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer' }}>
+                        <MessageCircle size={16} /> {issue.comment_count ?? 3}
+                      </button>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: '20px', background: '#FEF2F2', fontSize: '0.8125rem', fontWeight: '600', color: '#0F172A', marginLeft: 'auto' }}>
+                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#EF4444' }} />
+                        {issue.severity_label || 'High'}
                       </div>
 
-                      <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 6, color: 'var(--color-text)' }}>
-                        {issue.title}
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem', marginBottom: 12 }}>
-                        <MapPin size={13} />
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {issue.location?.address || 'Unknown location'}
-                        </span>
-                        {(() => {
-                          if (userLocation && issue.location?.lat) {
-                            const dist = haversineMeters(userLocation.lat, userLocation.lng, issue.location.lat, issue.location.lng)
-                            const distStr = dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(1)}km`
-                            return <span style={{ flexShrink: 0, fontWeight: 600, color: 'var(--color-primary)' }}>· {distStr} away</span>
-                          }
-                          return <span style={{ flexShrink: 0 }}>· {formatTimeAgo(issue.created_at)}</span>
-                        })()}
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <button 
-                          onClick={(e) => handleUpvote(e, issue)}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 6,
-                            background: issue.supporters?.includes(user?.uid) ? 'var(--color-primary)' : 'var(--color-primary-light)',
-                            color: issue.supporters?.includes(user?.uid) ? '#fff' : 'var(--color-primary)',
-                            borderRadius: 20, padding: '6px 14px',
-                            fontSize: '0.8125rem', fontWeight: 600,
-                            border: 'none', cursor: 'pointer'
-                          }}
-                        >
-                          👍 {issue.upvote_count ?? 0} Support
-                        </button>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', textTransform: 'capitalize' }}>
-                          {issue.issue_type?.replace('_', ' ')}
-                        </span>
+                      <div style={{ padding: '4px 10px', borderRadius: '8px', background: '#FEE2E2', color: '#B91C1C', fontSize: '0.8125rem', fontWeight: '600' }}>
+                        Status: {issue.status === 'in_progress' ? 'In Progress' : issue.status === 'resolved' ? 'Resolved' : 'Pending'}
                       </div>
                     </div>
                   </div>

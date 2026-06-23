@@ -28,6 +28,7 @@ function App() {
             }
           >
             <Route index element={<HomeFeed />} />
+            <Route path="/map" element={<HomeFeed />} />
             <Route path="/report" element={<ReportIssue />} />
             <Route path="/report/analyze" element={<AnalyzeIssue />} />
             <Route path="/report/confirm" element={<ConfirmIssue />} />

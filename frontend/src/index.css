@@ -59,8 +59,14 @@ body {
 
 #root {
   min-height: 100dvh;
+  width: 100%;
+  max-width: 42rem; /* 672px */
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
+  background-color: var(--color-surface);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.05);
+  position: relative;
 }
 
 /* ─── Typography ─────────────────────────────────────────────────────────────── */

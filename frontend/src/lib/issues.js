@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  setDoc,
   addDoc,
   updateDoc,
   query,
@@ -13,6 +14,7 @@ import {
   arrayUnion,
 } from 'firebase/firestore'
 import { db } from './firebase'
+import { awardPoints, POINTS } from './points'
 import { uploadImage } from './storage'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
@@ -125,6 +127,9 @@ export async function upvoteExistingIssue(issueId, reporterUid) {
     supporters: arrayUnion(reporterUid),
     updated_at: serverTimestamp(),
   })
+  if (reporterUid) {
+    await awardPoints(reporterUid, POINTS.UPVOTE)
+  }
 }
 
 // ── Submit flow (backend with client fallback) ────────────────────────────────
@@ -271,23 +276,43 @@ export async function isBackendFirebaseReady() {
 
 // ── Issue Interactions (Task 3.2) ──────────────────────────────────────────────
 
-export async function markIssueVerified(issueId) {
+export async function markIssueVerified(issueId, user) {
   const issueRef = doc(db, 'issues', issueId)
+  const snap = await getDoc(issueRef)
+
   await updateDoc(issueRef, {
     status: 'verified_resolved',
     updated_at: serverTimestamp()
   })
+
+  if (user?.uid) {
+    await awardPoints(user.uid, POINTS.VERIFY_RESOLVED)
+  }
+  if (snap.exists() && snap.data().reporter_uid) {
+    await awardPoints(snap.data().reporter_uid, POINTS.ISSUE_VERIFIED_RESOLVED)
+  }
 }
 
-export async function submitDispute(issueId, user, description, photoFile) {
-  let photoUrl = null
-  if (photoFile) {
-    const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}`
-    const path = `issues/${user.uid}/disputes/${filename}`
-    photoUrl = await uploadImage(photoFile, path)
-  }
+export async function submitDispute(issueId, user, description, file) {
+  if (!file) throw new Error("Proof photo is required for disputes")
+  
+  const filename = `${Date.now()}_dispute_${Math.random().toString(36).substring(7)}`
+  const path = `issues/${user.uid}/disputes/${filename}`
+  const photoUrl = await uploadImage(file, path)
 
   const issueRef = doc(db, 'issues', issueId)
+  const issueSnap = await getDoc(issueRef)
+  
+  if (issueSnap.exists()) {
+    const data = issueSnap.data()
+    if (data.officer_uid) {
+      const officerRef = doc(db, 'officers', data.officer_uid)
+      await setDoc(officerRef, {
+        fake_closure_count: increment(1)
+      }, { merge: true })
+    }
+  }
+
   await updateDoc(issueRef, {
     status: 'disputed',
     updated_at: serverTimestamp()
@@ -302,6 +327,10 @@ export async function submitDispute(issueId, user, description, photoFile) {
     user_name: user.displayName || 'Citizen',
     created_at: serverTimestamp()
   })
+
+  if (user?.uid) {
+    await awardPoints(user.uid, POINTS.DISPUTE, 'disputes_count')
+  }
 }
 
 export async function resolveIssueByOfficer(issueId, user, afterPhotoFile) {
@@ -322,6 +351,14 @@ export async function resolveIssueByOfficer(issueId, user, afterPhotoFile) {
     verification_deadline: deadline,
     updated_at: serverTimestamp()
   })
+
+  // Track officer total resolutions (Task 4.4)
+  const officerRef = doc(db, 'officers', user.uid)
+  await setDoc(officerRef, {
+    name: user.displayName || 'City Officer',
+    department: 'PWD', // Mock department
+    total_resolutions: increment(1)
+  }, { merge: true })
 
   const commentsRef = collection(db, 'issues', issueId, 'comments')
   await addDoc(commentsRef, {
@@ -357,4 +394,17 @@ export function subscribeToComments(issueId, callback) {
     })
     callback(comments)
   })
+}
+
+export async function triggerAIVerification(issueId) {
+  const res = await fetch('http://127.0.0.1:8000/api/verify-resolution', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ issue_id: issueId })
+  })
+  if (!res.ok) {
+    const errorData = await res.json()
+    throw new Error(errorData.detail || 'Failed to trigger AI Verification')
+  }
+  return await res.json()
 }

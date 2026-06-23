@@ -1,19 +1,21 @@
-import { Star, Shield, Search, Award, LogOut, Settings } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Star, Shield, Search, Award, LogOut, Settings, Clock, MapPin, CheckCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { useNavigate } from 'react-router-dom'
-import { doc, updateDoc } from 'firebase/firestore'
+import { useNavigate, Link } from 'react-router-dom'
+import { doc, updateDoc, collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 
-const BADGES = [
-  { icon: '🏆', label: 'First Report', earned: true },
-  { icon: '🔍', label: 'Issue Hunter', earned: true },
-  { icon: '🛡️', label: 'Truth Keeper', earned: false },
-  { icon: '⭐', label: 'Community Champion', earned: false },
+const BADGE_DEFS = [
+  { id: 'first_report', icon: '🏆', label: 'First Report', condition: (stats) => stats.reports > 0 },
+  { id: 'issue_hunter', icon: '🔍', label: 'Issue Hunter', condition: (stats) => stats.reports >= 10 },
+  { id: 'truth_keeper', icon: '🛡️', label: 'Truth Keeper', condition: (stats) => stats.disputes >= 3 },
+  { id: 'champion', icon: '⭐', label: 'Community Champion', condition: (stats) => stats.score >= 100 },
 ]
 
 export default function Profile() {
   const { user, userProfile, logout } = useAuth()
   const navigate = useNavigate()
+  const [reportedIssues, setReportedIssues] = useState([])
 
   const handleLogout = async () => {
     await logout()
@@ -23,8 +25,27 @@ export default function Profile() {
   const displayName = user?.displayName || userProfile?.name || 'Citizen'
   const displayEmail = user?.email || ''
   const photoURL = user?.photoURL
+  
+  // Real stats from user profile
   const citizenScore = userProfile?.citizenScore ?? 0
+  const reportsCount = userProfile?.reports_count ?? 0
+  const disputesCount = userProfile?.disputes_count ?? 0
+  
+  const statsObj = { score: citizenScore, reports: reportsCount, disputes: disputesCount }
+  const badges = BADGE_DEFS.map(b => ({ ...b, earned: b.condition(statsObj) }))
+  
   const isOfficer = userProfile?.is_officer === true
+
+  useEffect(() => {
+    if (!user) return
+    const q = query(collection(db, 'issues'), where('reporter_uid', '==', user.uid))
+    const unsub = onSnapshot(q, (snap) => {
+      const issues = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      issues.sort((a, b) => (b.created_at?.toMillis() || 0) - (a.created_at?.toMillis() || 0))
+      setReportedIssues(issues)
+    })
+    return () => unsub()
+  }, [user])
 
   const toggleOfficerMode = async () => {
     if (!user) return
@@ -93,11 +114,10 @@ export default function Profile() {
         </div>
 
         {/* Stats Row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>
           {[
-            { label: 'Reported', value: '12' },
-            { label: 'Resolved', value: '8' },
-            { label: 'Upvoted', value: '24' },
+            { label: 'Total Reported', value: reportsCount },
+            { label: 'Disputes Filed', value: disputesCount },
           ].map(s => (
             <div key={s.label} className="card" style={{ padding: '14px 10px', textAlign: 'center' }}>
               <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-primary)' }}>{s.value}</div>
@@ -109,8 +129,8 @@ export default function Profile() {
         {/* Badges */}
         <div className="card" style={{ padding: '16px', marginBottom: 20 }}>
           <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 16 }}>🏅 Badges</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {BADGES.map(badge => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            {badges.map(badge => (
               <div key={badge.label} style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '12px',
@@ -147,6 +167,47 @@ export default function Profile() {
               <span style={{ fontWeight: 700, color: 'var(--color-success)' }}>{row.pts}</span>
             </div>
           ))}
+        </div>
+
+        {/* Reported Issues History */}
+        <div style={{ marginTop: 24, marginBottom: 20 }}>
+          <div style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 12 }}>My Reported Issues</div>
+          {reportedIssues.length === 0 ? (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem', background: '#F8FAFC', borderRadius: 12 }}>
+              You haven't reported any issues yet.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {reportedIssues.map(issue => (
+                <Link key={issue.id} to={`/issue/${issue.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                  <div className="card" style={{ padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'center' }}>
+                    {issue.photos?.before?.[0] ? (
+                      <img src={issue.photos.before[0]} alt="issue" style={{ width: 60, height: 60, borderRadius: 8, objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: 60, height: 60, borderRadius: 8, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        📷
+                      </div>
+                    )}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 4 }}>{issue.title}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>
+                        <MapPin size={12} /> {issue.location?.address?.split(',')[0] || 'Unknown location'}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ 
+                          fontSize: '0.7rem', fontWeight: 600, padding: '2px 8px', borderRadius: 10,
+                          background: issue.status.includes('resolved') ? '#DCFCE7' : '#FEF9C3',
+                          color: issue.status.includes('resolved') ? '#166534' : '#854D0E'
+                        }}>
+                          {issue.status.replace('_', ' ').toUpperCase()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Developer Options (Mock Role) */}

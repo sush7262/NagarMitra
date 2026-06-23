@@ -58,6 +58,16 @@ class EscalationResponse(BaseModel):
     message: str
 
 
+class VerifyResolutionRequest(BaseModel):
+    issue_id: str
+
+
+class VerifyResolutionResponse(BaseModel):
+    verdict: str
+    explanation: str
+    message: str
+
+
 # ── Haversine distance (meters) ────────────────────────────────────────────────
 
 def haversine_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -326,6 +336,104 @@ async def run_escalation():
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Escalation task failed: {str(e)}")
+
+
+# ── Endpoint: Verify Resolution (AI Agent) ─────────────────────────────────────
+
+@router.post("/verify-resolution", response_model=VerifyResolutionResponse)
+async def verify_resolution(req: VerifyResolutionRequest):
+    """
+    Task 4.3: Gemini Vision compares before and after photos.
+    """
+    if not is_initialized():
+        raise HTTPException(status_code=503, detail="Firebase Admin SDK not configured.")
+
+    import json
+    import httpx
+    from datetime import timezone
+    from services.gemini_service import compare_images
+
+    db = get_db()
+    issue_ref = db.collection("issues").document(req.issue_id)
+    doc = await _run_in_thread(issue_ref.get)
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Issue not found")
+        
+    data = doc.to_dict()
+    before_urls = data.get("photos", {}).get("before", [])
+    after_urls = data.get("photos", {}).get("after", [])
+    
+    if not before_urls or not after_urls:
+        raise HTTPException(status_code=400, detail="Issue must have both before and after photos to verify.")
+        
+    # Fetch images
+    async with httpx.AsyncClient() as client:
+        try:
+            res_before = await client.get(before_urls[0])
+            res_before.raise_for_status()
+            before_bytes = res_before.content
+            
+            res_after = await client.get(after_urls[0])
+            res_after.raise_for_status()
+            after_bytes = res_after.content
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to download photos for AI verification: {str(e)}")
+            
+    prompt = '''
+    Compare these two images of a civic issue. Before image shows the reported problem. After image shows the current state. Has the issue been genuinely resolved? Rate resolution quality as exactly one of: not_resolved, partially_resolved, fully_resolved.
+    Return ONLY a valid JSON object matching this schema without any markdown formatting:
+    {
+      "verdict": "...",
+      "explanation": "Briefly explain why."
+    }
+    '''
+    
+    try:
+        ai_response = await compare_images(prompt, before_bytes, after_bytes)
+        ai_response_clean = ai_response.replace('```json', '').replace('```', '').strip()
+        result_data = json.loads(ai_response_clean)
+        verdict = result_data.get("verdict", "partially_resolved")
+        explanation = result_data.get("explanation", "AI verification complete.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI Verification failed: {str(e)}")
+        
+    now = datetime.now(timezone.utc)
+    updates = {
+        "ai_verification_verdict": verdict,
+        "ai_verification_explanation": explanation,
+        "updated_at": now
+    }
+    
+    comment_text = f"🤖 AI Verification: Verdict is '{verdict}'. {explanation}"
+    officer_uid = data.get("officer_uid")
+    
+    if verdict == "not_resolved":
+        updates["status"] = "in_progress"
+        comment_text += " Issue has been automatically re-opened due to fake closure detection."
+        if officer_uid:
+            officer_ref = db.collection("officers").document(officer_uid)
+            # Try to increment fake closure count (creates document if not exists via set with merge)
+            await _run_in_thread(lambda: officer_ref.set({"fake_closure_count": _firestore_increment(1)}, merge=True))
+    elif verdict == "fully_resolved" and data.get("status") == "resolved":
+        updates["status"] = "verified_resolved"
+        comment_text += " Resolution verified by AI!"
+        
+    await _run_in_thread(issue_ref.update, updates)
+    
+    comments_ref = issue_ref.collection("comments")
+    await _run_in_thread(comments_ref.add, {
+        "text": comment_text,
+        "user_name": "NagarMitra AI",
+        "user_uid": "system_ai",
+        "is_ai_verification": True,
+        "created_at": now
+    })
+    
+    return VerifyResolutionResponse(
+        verdict=verdict,
+        explanation=explanation,
+        message="Verification complete"
+    )
 
 
 # ── Firestore helpers (lazy import to avoid init-time errors) ──────────────────

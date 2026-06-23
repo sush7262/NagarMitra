@@ -46,6 +46,22 @@ async def generate_with_image(prompt: str, image_bytes: bytes, mime_type: str = 
     return response.text or ""
 
 
+async def compare_images(prompt: str, before_bytes: bytes, after_bytes: bytes, mime_type: str = "image/jpeg", model: str = MODEL_FLASH) -> str:
+    """Send two images + prompt and return the response text (for Before/After verification)."""
+    response = await client.aio.models.generate_content(
+        model=model,
+        contents=types.Content(
+            role="user",
+            parts=[
+                types.Part.from_bytes(data=before_bytes, mime_type=mime_type),
+                types.Part.from_bytes(data=after_bytes, mime_type=mime_type),
+                types.Part.from_text(text=prompt),
+            ],
+        ),
+    )
+    return response.text or ""
+
+
 async def test_connection() -> dict:
     """Simple ping to verify Gemini API is reachable."""
     response_text = await generate_text("Say 'NagarMitra AI online' and nothing else.")

@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, MapPin, ThumbsUp, Loader, AlertTriangle, Send } from 'lucide-react'
 import { 
   fetchIssueById, formatTimeAgo, upvoteExistingIssue,
-  markIssueVerified, submitDispute, addComment, subscribeToComments, resolveIssueByOfficer
+  markIssueVerified, submitDispute, addComment, subscribeToComments, resolveIssueByOfficer,
+  triggerAIVerification
 } from '../lib/issues'
 import { useAuth } from '../context/AuthContext'
 
@@ -70,6 +71,9 @@ export default function IssueDetail() {
   const [afterPhoto, setAfterPhoto] = useState(null)
   const [isResolving, setIsResolving] = useState(false)
 
+  // AI Verification state
+  const [isVerifying, setIsVerifying] = useState(false)
+
   const { user, userProfile } = useAuth()
 
   useEffect(() => {
@@ -105,7 +109,7 @@ export default function IssueDetail() {
   const handleVerify = async () => {
     if (!user) return navigate('/login')
     try {
-      await markIssueVerified(issue.id)
+      await markIssueVerified(issue.id, user)
       setIssue(prev => ({ ...prev, status: 'verified_resolved' }))
     } catch (err) {
       console.error(err)
@@ -139,6 +143,25 @@ export default function IssueDetail() {
       setError('Failed to mark as resolved: ' + err.message)
     } finally {
       setIsResolving(false)
+    }
+  }
+
+  const handleAIVerification = async () => {
+    setIsVerifying(true)
+    setError('')
+    try {
+      const res = await triggerAIVerification(issue.id)
+      // We don't necessarily update issue.status directly, we rely on Firebase snapshot to update it if the backend changed it.
+      // But we can trigger a refetch or rely on live listeners if we had them for the issue document.
+      // Since fetchIssueById is one-time in useEffect, let's fetch it again to get the latest status.
+      const updated = await fetchIssueById(issue.id)
+      setIssue(updated)
+      alert(`AI Verdict: ${res.verdict}\n\n${res.explanation}`)
+    } catch (err) {
+      console.error(err)
+      setError('AI Verification Failed: ' + err.message)
+    } finally {
+      setIsVerifying(false)
     }
   }
 
@@ -297,6 +320,26 @@ export default function IssueDetail() {
                 onClick={handleOfficerResolve}
               >
                 {isResolving ? 'Resolving...' : '✅ Mark as Resolved'}
+              </button>
+            </div>
+          )}
+
+          {/* AI Verification Tool (for Testing & Admins) */}
+          {(issue.status === 'resolved' || issue.status === 'disputed') && (
+            <div className="card" style={{ padding: '16px', marginBottom: 16, border: '1px dashed #7C3AED', background: '#F5F3FF' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 8, color: '#6D28D9' }}>
+                🤖 Task 4.3: AI Verification Agent
+              </div>
+              <p style={{ fontSize: '0.8125rem', color: '#5B21B6', marginBottom: 12 }}>
+                Trigger Gemini Vision to compare before & after photos and detect fake closures.
+              </p>
+              <button 
+                className="btn btn-primary" 
+                style={{ width: '100%', background: '#7C3AED' }} 
+                disabled={isVerifying}
+                onClick={handleAIVerification}
+              >
+                {isVerifying ? 'Running AI Vision Analysis...' : '🔍 Run AI Verification'}
               </button>
             </div>
           )}

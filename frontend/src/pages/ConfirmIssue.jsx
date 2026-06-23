@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ChevronLeft, Send, Loader, AlertTriangle, CheckCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { uploadImage } from '../lib/storage'
+import { awardPoints, POINTS } from '../lib/points'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'
 
@@ -89,6 +90,11 @@ export default function ConfirmIssue() {
       }
 
       const submitData = await submitRes.json()
+      
+      // Task 5.2: Award points for reporting a valid issue
+      if (user?.uid) {
+        await awardPoints(user.uid, POINTS.REPORT_ISSUE, 'reports_count')
+      }
       
       navigate('/', { replace: true, state: { successMsg: submitData.message } })
       

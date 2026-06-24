@@ -39,9 +39,19 @@ async def get_predictive_insights():
 
     try:
         db = get_db()
-        # Fetch up to 100 recent issues for analysis
-        issues_ref = db.collection("issues").order_by("created_at", direction="DESCENDING").limit(100)
-        docs = await run_in_thread(lambda: list(issues_ref.stream()))
+        departments = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"]
+        all_docs = []
+        for dept in departments:
+            group_ref = db.collection_group(dept).limit(30)
+            dept_docs = await run_in_thread(lambda g=group_ref: list(g.stream()))
+            all_docs.extend(dept_docs)
+            
+        def get_time(d):
+            dt = d.to_dict().get("created_at")
+            return dt.timestamp() if dt else 0
+            
+        all_docs.sort(key=get_time, reverse=True)
+        docs = all_docs[:100]
         
         if not docs:
             return {"insights": ["Not enough data yet. Encourage citizens to report more issues!"]}

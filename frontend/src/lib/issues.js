@@ -12,6 +12,8 @@ import {
   serverTimestamp,
   increment,
   arrayUnion,
+  collectionGroup,
+  documentId
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { awardPoints, POINTS } from './points'
@@ -77,51 +79,108 @@ export function computeStats(issues) {
 }
 
 function docToIssue(snap) {
-  return { id: snap.id, ...snap.data() }
+  return { id: snap.id, path: snap.ref.path, ...snap.data() }
 }
 
 // ── Firestore reads ───────────────────────────────────────────────────────────
 
-export function subscribeToIssues(callback, onError) {
-  const issuesRef = collection(db, 'issues')
-  return onSnapshot(
-    issuesRef,
-    (snapshot) => {
-      const issues = snapshot.docs.map(docToIssue)
-      callback(sortBySeverity(issues))
-    },
-    onError
-  )
+
+export function subscribeToAllIssues(callback, onError) {
+  const depts = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"];
+  const unsubs = [];
+  const state = {};
+  let initializedCount = 0;
+  
+  depts.forEach(dept => {
+    unsubs.push(onSnapshot(collectionGroup(db, dept), (snapshot) => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'removed') {
+          delete state[change.doc.id];
+        } else {
+          state[change.doc.id] = docToIssue(change.doc);
+        }
+      });
+      initializedCount++;
+      if (initializedCount >= depts.length) {
+        callback(Object.values(state));
+      }
+    }, onError));
+  });
+  
+  return () => unsubs.forEach(u => u());
 }
 
-export async function fetchIssueById(issueId) {
-  const snap = await getDoc(doc(db, 'issues', issueId))
-  if (!snap.exists()) return null
-  return docToIssue(snap)
+export function subscribeToUserIssues(uid, callback, onError) {
+  const depts = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"];
+  const unsubs = [];
+  const state = {};
+  let initializedCount = 0;
+  
+  depts.forEach(dept => {
+    const q = query(collectionGroup(db, dept), where("reporter_uid", "==", uid));
+    unsubs.push(onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'removed') delete state[change.doc.id];
+        else state[change.doc.id] = docToIssue(change.doc);
+      });
+      initializedCount++;
+      if (initializedCount >= depts.length) callback(Object.values(state));
+    }, onError));
+  });
+  return () => unsubs.forEach(u => u());
 }
+
+export function subscribeToIssues(callback, onError) {
+  return subscribeToAllIssues((issues) => {
+    callback(sortBySeverity(issues))
+  }, onError)
+}
+
+
+export async function fetchIssueById(issueId) {
+  const depts = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"];
+  for (const dept of depts) {
+    const q = query(collectionGroup(db, dept), where("issue_id", "==", issueId));
+    const snap = await getDocs(q);
+    if (!snap.empty) return docToIssue(snap.docs[0]);
+  }
+  return null;
+}
+
+export async function getIssueRefById(issueId) {
+  const depts = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"];
+  for (const dept of depts) {
+    const q = query(collectionGroup(db, dept), where("issue_id", "==", issueId));
+    const snap = await getDocs(q);
+    if (!snap.empty) return snap.docs[0].ref;
+  }
+  throw new Error("Issue not found");
+}
+
 
 // ── Duplicate detection (client fallback) ───────────────────────────────────
 
+
 async function findDuplicateClient(issueType, lat, lng) {
-  const q = query(
-    collection(db, 'issues'),
-    where('issue_type', '==', issueType),
-    where('status', 'in', ['open', 'in_progress'])
-  )
-  const snapshot = await getDocs(q)
-  for (const docSnap of snapshot.docs) {
-    const data = docSnap.data()
-    const loc = data.location || {}
-    if (loc.lat == null || loc.lng == null) continue
-    if (haversineMeters(lat, lng, loc.lat, loc.lng) <= RADIUS_METERS) {
-      return { id: docSnap.id, ...data }
+  const depts = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"];
+  for (const dept of depts) {
+    const q = query(collectionGroup(db, dept), where('issue_type', '==', issueType), where('status', 'in', ['open', 'in_progress']));
+    const snapshot = await getDocs(q);
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      const loc = data.location || {};
+      if (loc.lat == null || loc.lng == null) continue;
+      if (haversineMeters(lat, lng, loc.lat, loc.lng) <= RADIUS_METERS) {
+        return { id: docSnap.id, path: docSnap.ref.path, ...data };
+      }
     }
   }
-  return null
+  return null;
 }
 
+
 export async function upvoteExistingIssue(issueId, reporterUid) {
-  const issueRef = doc(db, 'issues', issueId)
+  const issueRef = await getIssueRefById(issueId)
   await updateDoc(issueRef, {
     upvote_count: increment(1),
     supporters: arrayUnion(reporterUid),
@@ -162,8 +221,11 @@ async function checkDuplicateViaClient(issueType, location, reporterUid) {
   return { is_duplicate: false, message: 'No duplicate found. Proceed to submit.' }
 }
 
+
 async function submitViaClient(payload) {
-  const docRef = await addDoc(collection(db, 'issues'), {
+  const colRef = collection(db, 'issues', 'user_issue', payload.department);
+  const docRef = doc(colRef);
+  const docData = {
     title: payload.title,
     description: payload.description,
     issue_type: payload.issue_type,
@@ -188,9 +250,12 @@ async function submitViaClient(payload) {
     officer_uid: null,
     verification_deadline: null,
     ai_confidence: payload.ai_confidence,
-  })
+    issue_id: docRef.id
+  };
+  await setDoc(docRef, docData);
   return { issue_id: docRef.id, message: 'Issue successfully reported!' }
 }
+
 
 /**
  * Full submit: duplicate check → photo upload → save.
@@ -277,7 +342,7 @@ export async function isBackendFirebaseReady() {
 // ── Issue Interactions (Task 3.2) ──────────────────────────────────────────────
 
 export async function markIssueVerified(issueId, user) {
-  const issueRef = doc(db, 'issues', issueId)
+  const issueRef = await getIssueRefById(issueId)
   const snap = await getDoc(issueRef)
 
   await updateDoc(issueRef, {
@@ -300,7 +365,7 @@ export async function submitDispute(issueId, user, description, file) {
   const path = `issues/${user.uid}/disputes/${filename}`
   const photoUrl = await uploadImage(file, path)
 
-  const issueRef = doc(db, 'issues', issueId)
+  const issueRef = await getIssueRefById(issueId)
   const issueSnap = await getDoc(issueRef)
   
   if (issueSnap.exists()) {
@@ -318,7 +383,7 @@ export async function submitDispute(issueId, user, description, file) {
     updated_at: serverTimestamp()
   })
 
-  const commentsRef = collection(db, 'issues', issueId, 'comments')
+  const commentsRef = collection(issueRef, 'comments')
   await addDoc(commentsRef, {
     text: description,
     photo_url: photoUrl,
@@ -344,7 +409,7 @@ export async function resolveIssueByOfficer(issueId, user, userProfile, afterPho
   const path = `issues/${user.uid}/resolutions/${filename}`
   const photoUrl = await uploadImage(afterPhotoFile, path)
 
-  const issueRef = doc(db, 'issues', issueId)
+  const issueRef = await getIssueRefById(issueId)
   const deadline = new Date(Date.now() + 48 * 60 * 60 * 1000) // +48 hours
 
   await updateDoc(issueRef, {
@@ -366,7 +431,7 @@ export async function resolveIssueByOfficer(issueId, user, userProfile, afterPho
     total_resolutions: increment(1)
   }, { merge: true })
 
-  const commentsRef = collection(db, 'issues', issueId, 'comments')
+  const commentsRef = collection(issueRef, 'comments')
   await addDoc(commentsRef, {
     text: `✅ Official Resolution: The assigned officer (${officerName} - ${officerDept}) has marked this issue as resolved. Please review the attached proof photo.`,
     photo_url: photoUrl,
@@ -378,7 +443,8 @@ export async function resolveIssueByOfficer(issueId, user, userProfile, afterPho
 }
 
 export async function addComment(issueId, user, text) {
-  const commentsRef = collection(db, 'issues', issueId, 'comments')
+  const issueRef = await getIssueRefById(issueId);
+  const commentsRef = collection(issueRef, 'comments')
   await addDoc(commentsRef, {
     text,
     user_uid: user.uid,
@@ -387,20 +453,25 @@ export async function addComment(issueId, user, text) {
   })
 }
 
+
 export function subscribeToComments(issueId, callback) {
-  const commentsRef = collection(db, 'issues', issueId, 'comments')
-  // We don't have complex indexes yet, so we will sort client side
-  return onSnapshot(commentsRef, (snapshot) => {
-    const comments = snapshot.docs.map(snap => ({ id: snap.id, ...snap.data() }))
-    // Sort by created_at ascending (oldest first)
-    comments.sort((a, b) => {
-      const timeA = a.created_at?.toMillis() || 0
-      const timeB = b.created_at?.toMillis() || 0
-      return timeA - timeB
-    })
-    callback(comments)
-  })
+  let unsub = () => {};
+  let isCancelled = false;
+  getIssueRefById(issueId).then(issueRef => {
+    if (isCancelled) return;
+    const commentsRef = collection(issueRef, 'comments');
+    unsub = onSnapshot(commentsRef, (snapshot) => {
+      const comments = snapshot.docs.map(snap => ({ id: snap.id, ...snap.data() }));
+      comments.sort((a, b) => (a.created_at?.toMillis() || 0) - (b.created_at?.toMillis() || 0));
+      callback(comments);
+    });
+  }).catch(e => console.error(e));
+  return () => {
+    isCancelled = true;
+    unsub();
+  };
 }
+
 
 export async function triggerAIVerification(issueId) {
   const res = await fetch('http://127.0.0.1:8000/api/verify-resolution', {

@@ -296,7 +296,7 @@ export default function IssueDetail() {
             {issue.supporters?.includes(user?.uid) ? 'You Supported This' : 'Support this Issue'} · {issue.upvote_count ?? 0} citizens
           </button>
 
-          {userProfile?.is_officer && (issue.status === 'open' || issue.status === 'in_progress') && (
+          {userProfile?.is_officer === true && (issue.status === 'open' || issue.status === 'in_progress') && (
             <div className="card" style={{ padding: '16px', marginBottom: 16, border: '1px solid var(--color-primary)' }}>
               <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 8, color: 'var(--color-primary)' }}>
                 🛡️ Officer Action: Resolve Issue
@@ -325,7 +325,7 @@ export default function IssueDetail() {
           )}
 
           {/* AI Verification Tool (for Testing & Admins) */}
-          {(issue.status === 'resolved' || issue.status === 'disputed') && (
+          {userProfile?.is_officer === true && (issue.status === 'resolved' || issue.status === 'disputed') && (
             <div className="card" style={{ padding: '16px', marginBottom: 16, border: '1px dashed #7C3AED', background: '#F5F3FF' }}>
               <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 8, color: '#6D28D9' }}>
                 🤖 Task 4.3: AI Verification Agent

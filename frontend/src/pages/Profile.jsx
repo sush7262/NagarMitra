@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useNavigate, Link } from 'react-router-dom'
 import { doc, updateDoc, collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../lib/firebase'
+import { subscribeToUserIssues } from '../lib/issues'
 
 const BADGE_DEFS = [
   { id: 'first_report', icon: '🏆', label: 'First Report', condition: (stats) => stats.reports > 0 },
@@ -38,12 +39,10 @@ export default function Profile() {
 
   useEffect(() => {
     if (!user) return
-    const q = query(collection(db, 'issues'), where('reporter_uid', '==', user.uid))
-    const unsub = onSnapshot(q, (snap) => {
-      const issues = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+    const unsub = subscribeToUserIssues(user.uid, (issues) => {
       issues.sort((a, b) => (b.created_at?.toMillis() || 0) - (a.created_at?.toMillis() || 0))
       setReportedIssues(issues)
-    })
+    }, console.error)
     return () => unsub()
   }, [user])
 
@@ -118,89 +117,95 @@ export default function Profile() {
           ))}
         </div>
 
-        {/* Badges */}
-        <div className="card" style={{ padding: '16px', marginBottom: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 16 }}>🏅 Badges</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-            {badges.map(badge => (
-              <div key={badge.label} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '12px',
-                borderRadius: 10,
-                background: badge.earned ? 'var(--color-primary-light)' : '#F8FAFC',
-                border: `1.5px solid ${badge.earned ? '#BFDBFE' : 'var(--color-border)'}`,
-                opacity: badge.earned ? 1 : 0.5,
+        {/* Badges - Hidden for officers */}
+        {!isOfficer && (
+          <div className="card" style={{ padding: '16px', marginBottom: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 16 }}>🏅 Badges</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+              {badges.map(badge => (
+                <div key={badge.label} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '12px',
+                  borderRadius: 10,
+                  background: badge.earned ? 'var(--color-primary-light)' : '#F8FAFC',
+                  border: `1.5px solid ${badge.earned ? '#BFDBFE' : 'var(--color-border)'}`,
+                  opacity: badge.earned ? 1 : 0.5,
+                }}>
+                  <span style={{ fontSize: '1.5rem' }}>{badge.icon}</span>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: badge.earned ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
+                    {badge.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Points breakdown - Hidden for officers */}
+        {!isOfficer && (
+          <div className="card" style={{ padding: '16px' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 14 }}>📈 How to Earn Points</div>
+            {[
+              { action: 'Report valid issue', pts: '+10' },
+              { action: 'Issue gets resolved', pts: '+20' },
+              { action: 'Upvote an issue', pts: '+2' },
+              { action: 'Successful dispute', pts: '+30' },
+              { action: 'Verify resolution', pts: '+5' },
+            ].map(row => (
+              <div key={row.action} style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '8px 0', borderBottom: '1px solid var(--color-border)',
+                fontSize: '0.875rem',
               }}>
-                <span style={{ fontSize: '1.5rem' }}>{badge.icon}</span>
-                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: badge.earned ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
-                  {badge.label}
-                </span>
+                <span style={{ color: 'var(--color-text-muted)' }}>{row.action}</span>
+                <span style={{ fontWeight: 700, color: 'var(--color-success)' }}>{row.pts}</span>
               </div>
             ))}
           </div>
-        </div>
+        )}
 
-        {/* Points breakdown */}
-        <div className="card" style={{ padding: '16px' }}>
-          <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 14 }}>📈 How to Earn Points</div>
-          {[
-            { action: 'Report valid issue', pts: '+10' },
-            { action: 'Issue gets resolved', pts: '+20' },
-            { action: 'Upvote an issue', pts: '+2' },
-            { action: 'Successful dispute', pts: '+30' },
-            { action: 'Verify resolution', pts: '+5' },
-          ].map(row => (
-            <div key={row.action} style={{
-              display: 'flex', justifyContent: 'space-between',
-              padding: '8px 0', borderBottom: '1px solid var(--color-border)',
-              fontSize: '0.875rem',
-            }}>
-              <span style={{ color: 'var(--color-text-muted)' }}>{row.action}</span>
-              <span style={{ fontWeight: 700, color: 'var(--color-success)' }}>{row.pts}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Reported Issues History */}
-        <div style={{ marginTop: 24, marginBottom: 20 }}>
-          <div style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 12 }}>My Reported Issues</div>
-          {reportedIssues.length === 0 ? (
-            <div style={{ padding: 20, textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem', background: '#F8FAFC', borderRadius: 12 }}>
-              You haven't reported any issues yet.
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {reportedIssues.map(issue => (
-                <Link key={issue.id} to={`/issue/${issue.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                  <div className="card" style={{ padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'center' }}>
-                    {issue.photos?.before?.[0] ? (
-                      <img src={issue.photos.before[0]} alt="issue" style={{ width: 60, height: 60, borderRadius: 8, objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: 60, height: 60, borderRadius: 8, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        📷
-                      </div>
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 4 }}>{issue.title}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>
-                        <MapPin size={12} /> {issue.location?.address?.split(',')[0] || 'Unknown location'}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ 
-                          fontSize: '0.7rem', fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                          background: issue.status.includes('resolved') ? '#DCFCE7' : '#FEF9C3',
-                          color: issue.status.includes('resolved') ? '#166534' : '#854D0E'
-                        }}>
-                          {issue.status.replace('_', ' ').toUpperCase()}
-                        </span>
+        {/* Reported Issues History - Hidden for officers */}
+        {!isOfficer && (
+          <div style={{ marginTop: 24, marginBottom: 20 }}>
+            <div style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 12 }}>My Reported Issues</div>
+            {reportedIssues.length === 0 ? (
+              <div style={{ padding: 20, textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem', background: '#F8FAFC', borderRadius: 12 }}>
+                You haven't reported any issues yet.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {reportedIssues.map(issue => (
+                  <Link key={issue.id} to={`/issue/${issue.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                    <div className="card" style={{ padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'center' }}>
+                      {issue.photos?.before?.[0] ? (
+                        <img src={issue.photos.before[0]} alt="issue" style={{ width: 60, height: 60, borderRadius: 8, objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: 60, height: 60, borderRadius: 8, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          📷
+                        </div>
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 4 }}>{issue.title}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: 6 }}>
+                          <MapPin size={12} /> {issue.location?.address?.split(',')[0] || 'Unknown location'}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ 
+                            fontSize: '0.7rem', fontWeight: 600, padding: '2px 8px', borderRadius: 10,
+                            background: issue.status.includes('resolved') ? '#DCFCE7' : '#FEF9C3',
+                            color: issue.status.includes('resolved') ? '#166534' : '#854D0E'
+                          }}>
+                            {issue.status.replace('_', ' ').toUpperCase()}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Departmental Login Section */}
         <div style={{ marginTop: 32, padding: 24, background: '#F8FAFC', borderRadius: 16, textAlign: 'center' }}>

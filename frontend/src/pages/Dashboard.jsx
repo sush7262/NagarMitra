@@ -3,6 +3,7 @@ import { BarChart2, TrendingUp, Award, MapPin, AlertTriangle } from 'lucide-reac
 import { collection, getDocs, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts'
+import { subscribeToAllIssues } from '../lib/issues'
 import { useAuth } from '../context/AuthContext'
 
 const COLORS = ['#1A56DB', '#7C3AED', '#D97706', '#166534', '#DC2626']
@@ -11,6 +12,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000'
 export default function Dashboard() {
   const { userProfile } = useAuth()
   const isOfficer = userProfile?.is_officer === true
+  const officerDept = userProfile?.department
 
   const [flaggedOfficers, setFlaggedOfficers] = useState([])
   const [stats, setStats] = useState({ reported: 0, resolved: 0, inProgress: 0, disputed: 0 })
@@ -60,8 +62,7 @@ export default function Dashboard() {
     }
     fetchFlagged()
 
-    const q = query(collection(db, 'issues'))
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = subscribeToAllIssues((issues) => {
       let reported = 0, resolved = 0, inProgress = 0, disputed = 0
       let typesCount = {}
       let deptStats = {}
@@ -71,8 +72,24 @@ export default function Dashboard() {
       const now = new Date()
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-      snapshot.forEach(doc => {
-        const data = doc.data()
+      issues.forEach(data => {
+        
+        // Calculate deptStats for leaderboard regardless of officer's own department
+        if (data.department && data.created_at && data.resolved_at && (data.status === 'resolved' || data.status === 'verified_resolved')) {
+          const created = data.created_at.toDate()
+          const resDate = data.resolved_at.toDate()
+          const hours = (resDate - created) / (1000 * 60 * 60)
+          
+          if (!deptStats[data.department]) deptStats[data.department] = { resolved: 0, totalHours: 0 }
+          deptStats[data.department].resolved++
+          deptStats[data.department].totalHours += hours
+        }
+
+        // If officer, only count their department's issues for the main stats
+        if (isOfficer && officerDept && data.department !== officerDept) {
+          return
+        }
+
         reported++
 
         if (data.status === 'resolved' || data.status === 'verified_resolved') resolved++
@@ -90,16 +107,6 @@ export default function Dashboard() {
           const parts = data.location.address.split(',')
           const zone = parts.length > 1 ? parts[parts.length - 2].trim() : data.location.address
           zonesCount[zone] = (zonesCount[zone] || 0) + 1
-        }
-
-        if (data.department && data.created_at && data.resolved_at && (data.status === 'resolved' || data.status === 'verified_resolved')) {
-          const created = data.created_at.toDate()
-          const resDate = data.resolved_at.toDate()
-          const hours = (resDate - created) / (1000 * 60 * 60)
-          
-          if (!deptStats[data.department]) deptStats[data.department] = { resolved: 0, totalHours: 0 }
-          deptStats[data.department].resolved++
-          deptStats[data.department].totalHours += hours
         }
       })
 
@@ -140,8 +147,10 @@ export default function Dashboard() {
   return (
     <div>
       <header className="app-bar">
-        <span style={{ fontWeight: 800, fontSize: '1.0625rem' }}>City Dashboard</span>
-        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Bangalore, KA</span>
+        <span style={{ fontWeight: 800, fontSize: '1.0625rem' }}>
+          {isOfficer ? `${officerDept} Dashboard` : 'City Dashboard'}
+        </span>
+        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Siliguri, WB</span>
       </header>
 
       <div className="page" style={{ paddingTop: 20 }}>
@@ -154,7 +163,7 @@ export default function Dashboard() {
           fontWeight: 700, fontSize: '0.9375rem',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
         }}>
-          <span>🎉</span> {issuesThisMonth} civic issues resolved in your city this month!
+          <span>🎉</span> {issuesThisMonth} issues resolved {isOfficer ? 'by your department' : 'in your city'} this month!
         </div>
 
         {/* AI Insights (Task 5.3) - Only for Officers/Admins */}

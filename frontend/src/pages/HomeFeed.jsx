@@ -82,7 +82,7 @@ export default function HomeFeed() {
     setViewMode(location.pathname === '/map' ? 'map' : 'list')
   }, [location.pathname])
   const [userLocation, setUserLocation] = useState(null)
-  const { user } = useAuth()
+  const { user, userProfile } = useAuth()
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -121,9 +121,17 @@ export default function HomeFeed() {
   const userLng = lngStr ? parseFloat(lngStr) : null
   const FILTER_RADIUS_KM = 10 // Only show issues within 10km
 
+  const isOfficer = userProfile?.is_officer === true
+  const officerDept = userProfile?.department
+
   const filteredRaw = filterIssues(issues, statusFilter)
     .filter(i => typeFilter === 'All' ? true : i.issue_type === typeFilter)
     .filter(i => {
+      // Department filter for officers
+      if (isOfficer && officerDept && i.department !== officerDept) {
+        return false
+      }
+      
       if (i.is_global) return true // Show global issues everywhere
       if (!userLat || !userLng) return true // Show all if user location not set
       if (!i.location?.lat || !i.location?.lng) return false // Hide issues with missing location

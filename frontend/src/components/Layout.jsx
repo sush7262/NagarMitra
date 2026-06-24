@@ -1,10 +1,13 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { Home, BarChart2, User, Plus, Map } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAuth } from '../context/AuthContext'
 
 export default function Layout() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const { userProfile } = useAuth()
+  const isOfficer = userProfile?.is_officer === true
 
   return (
     <div className="w-full bg-[var(--bg-primary)]">
@@ -34,16 +37,18 @@ export default function Layout() {
             <span className="text-[0.65rem] font-medium mt-1">{t('Analytics')}</span>
           </NavLink>
 
-          {/* Central Plus Button */}
-          <div className="flex flex-col items-center justify-center px-2">
-            <button
-              className="w-12 h-12 flex items-center justify-center rounded-xl text-white bg-[#059669] shadow-md shadow-emerald-200 cursor-pointer border-none"
-              onClick={() => navigate('/report')}
-              aria-label="Report a civic issue"
-            >
-              <Plus size={26} strokeWidth={2.5} />
-            </button>
-          </div>
+          {/* Central Plus Button - Hidden for officers */}
+          {!isOfficer && (
+            <div className="flex flex-col items-center justify-center px-2">
+              <button
+                className="w-12 h-12 flex items-center justify-center rounded-xl text-white bg-[#059669] shadow-md shadow-emerald-200 cursor-pointer border-none"
+                onClick={() => navigate('/report')}
+                aria-label="Report a civic issue"
+              >
+                <Plus size={26} strokeWidth={2.5} />
+              </button>
+            </div>
+          )}
 
           <NavLink
             to="/map"

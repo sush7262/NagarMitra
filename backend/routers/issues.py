@@ -85,31 +85,31 @@ def haversine_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> floa
 
 def find_duplicate(issue_type: str, lat: float, lng: float, radius_meters: float = 100) -> Optional[dict]:
     """
-    Query Firestore for an open/in-progress issue of the same type within radius_meters.
-    Returns the matching issue dict (with 'id') or None.
+    Query Firestore across all department collection groups for an open/in-progress issue.
+    Returns the matching issue dict (with 'id' and 'ref') or None.
     """
     db = get_db()
-    issues_ref = db.collection("issues")
+    departments = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"]
 
-    # Filter by issue_type and non-resolved statuses
-    query = (
-        issues_ref
-        .where("issue_type", "==", issue_type)
-        .where("status", "in", ["open", "in_progress"])
-        .limit(50)           # reasonable cap; geo-filter applied below
-    )
+    for dept in departments:
+        query = (
+            db.collection_group(dept)
+            .where("issue_type", "==", issue_type)
+            .where("status", "in", ["open", "in_progress"])
+            .limit(50)
+        )
 
-    docs = query.stream()
-    for doc in docs:
-        data = doc.to_dict()
-        loc = data.get("location", {})
-        existing_lat = loc.get("lat")
-        existing_lng = loc.get("lng")
-        if existing_lat is None or existing_lng is None:
-            continue
-        dist = haversine_meters(lat, lng, existing_lat, existing_lng)
-        if dist <= radius_meters:
-            return {"id": doc.id, **data}
+        docs = query.stream()
+        for doc in docs:
+            data = doc.to_dict()
+            loc = data.get("location", {})
+            existing_lat = loc.get("lat")
+            existing_lng = loc.get("lng")
+            if existing_lat is None or existing_lng is None:
+                continue
+            dist = haversine_meters(lat, lng, existing_lat, existing_lng)
+            if dist <= radius_meters:
+                return {"id": doc.id, "ref": doc.reference, **data}
 
     return None
 
@@ -141,8 +141,7 @@ async def check_duplicate(req: DuplicateCheckRequest):
     if duplicate:
         issue_id = duplicate["id"]
         try:
-            db = get_db()
-            issue_ref = db.collection("issues").document(issue_id)
+            issue_ref = duplicate["ref"]
             issue_ref.update({
                 "upvote_count": _firestore_increment(1),
                 "supporters": _firestore_array_union([req.reporter_uid]),
@@ -226,8 +225,9 @@ async def submit_issue(req: SubmitIssueRequest):
     }
 
     try:
-        # Save to Firestore
-        doc_ref = db.collection("issues").document()
+        # Save to Firestore in user_issue -> department -> doc
+        doc_ref = db.collection("issues").document("user_issue").collection(req.department).document()
+        doc_data["issue_id"] = doc_ref.id
         await _run_in_thread(doc_ref.set, doc_data)
         
         return SubmitIssueResponse(
@@ -243,12 +243,14 @@ async def submit_issue(req: SubmitIssueRequest):
 def process_escalations() -> dict:
     from datetime import datetime, timezone
     db = get_db()
-    issues_ref = db.collection("issues")
+    departments = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"]
     
-    # Query open and in_progress
-    open_docs = list(issues_ref.where("status", "==", "open").stream())
-    prog_docs = list(issues_ref.where("status", "==", "in_progress").stream())
-    all_docs = open_docs + prog_docs
+    all_docs = []
+    for dept in departments:
+        group_ref = db.collection_group(dept)
+        open_docs = list(group_ref.where("status", "==", "open").stream())
+        prog_docs = list(group_ref.where("status", "==", "in_progress").stream())
+        all_docs.extend(open_docs + prog_docs)
     
     now = datetime.now(timezone.utc)
     processed = 0
@@ -354,12 +356,21 @@ async def verify_resolution(req: VerifyResolutionRequest):
     from services.gemini_service import compare_images
 
     db = get_db()
-    issue_ref = db.collection("issues").document(req.issue_id)
-    doc = await _run_in_thread(issue_ref.get)
-    if not doc.exists:
+    
+    # We must find the issue document reference since the ID alone is not enough to locate the path
+    departments = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"]
+    issue_doc = None
+    for dept in departments:
+        docs = list(db.collection_group(dept).where("__name__", "==", req.issue_id).stream())
+        if docs:
+            issue_doc = docs[0]
+            break
+            
+    if not issue_doc:
         raise HTTPException(status_code=404, detail="Issue not found")
         
-    data = doc.to_dict()
+    data = issue_doc.to_dict()
+    issue_ref = issue_doc.reference
     before_urls = data.get("photos", {}).get("before", [])
     after_urls = data.get("photos", {}).get("after", [])
     

@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 import random
 
 # Add current directory to path so we can import services
@@ -114,7 +114,7 @@ def generate_issues():
     }
 
     count = 0
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for dept, issues in departments_data.items():
         for item in issues:
             lat = base_lat + random.uniform(-0.02, 0.02)

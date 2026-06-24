@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { MapPin, List, Map, Loader, CheckCircle, Search, Clock, ChevronLeft, ChevronRight, MessageCircle, ArrowUp } from 'lucide-react'
+import { MapPin, List, Map, Loader, CheckCircle, Search, Clock, ChevronLeft, ChevronRight, MessageCircle, ArrowUp, X, Send } from 'lucide-react'
 import MapView from '../components/MapView'
 import {
   subscribeToIssues,
@@ -10,6 +10,8 @@ import {
   formatTimeAgo,
   haversineMeters,
   upvoteExistingIssue,
+  addComment,
+  subscribeToComments,
 } from '../lib/issues'
 import { useAuth } from '../context/AuthContext'
 
@@ -61,6 +63,12 @@ export default function HomeFeed() {
   const [statusFilter, setStatusFilter] = useState('All')
   const [typeFilter, setTypeFilter] = useState('All')
   const [successMsg, setSuccessMsg] = useState(location.state?.successMsg || '')
+  const [commentModal, setCommentModal] = useState(null) // { issueId, issueTitle }
+  const [comments, setComments] = useState([])
+  const [loadingComments, setLoadingComments] = useState(false)
+  const [commentText, setCommentText] = useState('')
+  const [sendingComment, setSendingComment] = useState(false)
+  const commentInputRef = useRef(null)
 
   useEffect(() => {
     const lat = localStorage.getItem('userLat')
@@ -175,6 +183,44 @@ export default function HomeFeed() {
       } catch (err) {
         console.error('Upvote failed:', err)
       }
+    }
+  }
+
+  // Comment modal handlers
+  const openCommentModal = (e, issue) => {
+    e.stopPropagation()
+    if (!user) { navigate('/login'); return }
+    setCommentModal({ issueId: issue.id, issueTitle: issue.title })
+    setComments([])
+    setLoadingComments(true)
+    setCommentText('')
+  }
+
+  useEffect(() => {
+    if (!commentModal) return
+    const unsub = subscribeToComments(commentModal.issueId, (data) => {
+      setComments(data)
+      setLoadingComments(false)
+    })
+    return () => unsub()
+  }, [commentModal?.issueId])
+
+  useEffect(() => {
+    if (commentModal && commentInputRef.current) {
+      setTimeout(() => commentInputRef.current?.focus(), 200)
+    }
+  }, [commentModal])
+
+  const handleSendComment = async () => {
+    if (!commentText.trim() || sendingComment) return
+    setSendingComment(true)
+    try {
+      await addComment(commentModal.issueId, user, commentText.trim())
+      setCommentText('')
+    } catch (err) {
+      console.error('Comment failed:', err)
+    } finally {
+      setSendingComment(false)
     }
   }
 
@@ -389,13 +435,16 @@ export default function HomeFeed() {
                     <div style={{ padding: '16px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                       <button
                         onClick={(e) => handleUpvote(e, issue)}
-                        style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#FFFFFF', color: '#475569', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer' }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', borderRadius: '8px', border: issue.supporters?.includes(user?.uid) ? '1px solid #16A34A' : '1px solid #E2E8F0', background: issue.supporters?.includes(user?.uid) ? '#F0FDF4' : '#FFFFFF', color: issue.supporters?.includes(user?.uid) ? '#16A34A' : '#475569', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer' }}
                       >
                         <ArrowUp size={16} /> {issue.upvote_count ?? 0}
                       </button>
 
-                      <button style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#FFFFFF', color: '#475569', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer' }}>
-                        <MessageCircle size={16} /> {issue.comment_count ?? 3}
+                      <button
+                        onClick={(e) => openCommentModal(e, issue)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#FFFFFF', color: '#475569', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer' }}
+                      >
+                        <MessageCircle size={16} /> {issue.comment_count ?? 0}
                       </button>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: '20px', background: '#FEF2F2', fontSize: '0.8125rem', fontWeight: '600', color: '#0F172A', marginLeft: 'auto' }}>
@@ -442,6 +491,102 @@ export default function HomeFeed() {
       )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* Comment Modal — Instagram Style */}
+      {commentModal && (
+        <div
+          onClick={() => setCommentModal(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', animation: 'fadeIn 0.2s ease' }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: '500px', height: '65vh', display: 'flex', flexDirection: 'column', animation: 'slideUp 0.35s cubic-bezier(0.32, 0.72, 0, 1)' }}
+          >
+            {/* Drag Handle */}
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
+              <div style={{ width: '40px', height: '4px', borderRadius: '2px', background: '#D1D5DB' }} />
+            </div>
+
+            {/* Header */}
+            <div style={{ padding: '8px 20px 14px', borderBottom: '1px solid #EFEFEF', textAlign: 'center', position: 'relative' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#262626', letterSpacing: '-0.01em' }}>Comments</h3>
+              <button onClick={() => setCommentModal(null)} style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#262626', padding: '4px' }}>
+                <X size={22} />
+              </button>
+            </div>
+
+            {/* Comments List */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px' }}>
+              {loadingComments ? (
+                <div style={{ padding: '48px 0', color: '#8E8E8E', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                  <Loader size={32} style={{ marginBottom: '12px', opacity: 0.5, animation: 'spin 1s linear infinite' }} />
+                  <p style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 500, textAlign: 'center' }}>Loading comments...</p>
+                </div>
+              ) : comments.length === 0 ? (
+                <div style={{ padding: '48px 0', color: '#8E8E8E', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                  <MessageCircle size={48} style={{ marginBottom: '12px', opacity: 0.4, strokeWidth: 1 }} />
+                  <p style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 500, textAlign: 'center' }}>No comments yet</p>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: '#AEAEAE', textAlign: 'center' }}>Start the conversation.</p>
+                </div>
+              ) : (
+                comments.map((c, idx) => {
+                  const initials = (c.user_name || 'C').charAt(0).toUpperCase()
+                  const colors = ['#E91E63', '#9C27B0', '#3F51B5', '#00BCD4', '#4CAF50', '#FF9800', '#795548']
+                  const bgColor = colors[(c.user_name || '').length % colors.length]
+                  return (
+                    <div key={c.id} style={{ display: 'flex', gap: '12px', marginBottom: '20px', animation: `fadeSlideIn 0.3s ease ${idx * 0.05}s both` }}>
+                      {/* Avatar */}
+                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: `linear-gradient(135deg, ${bgColor}, ${bgColor}dd)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <span style={{ color: '#fff', fontSize: '0.8125rem', fontWeight: 700 }}>{initials}</span>
+                      </div>
+                      {/* Content */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#262626', lineHeight: '1.45' }}>
+                          <span style={{ fontWeight: 700, marginRight: '6px' }}>{c.user_name || 'Citizen'}</span>
+                          {c.text}
+                        </p>
+                        <div style={{ display: 'flex', gap: '16px', marginTop: '6px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#8E8E8E', fontWeight: 500 }}>{formatTimeAgo(c.created_at)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {/* Input — Instagram Style */}
+            <div style={{ padding: '12px 16px', borderTop: '1px solid #EFEFEF', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {/* User Avatar */}
+              <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'linear-gradient(135deg, #16A34A, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ color: '#fff', fontSize: '0.8rem', fontWeight: 700 }}>{(user?.displayName || 'Y').charAt(0).toUpperCase()}</span>
+              </div>
+              <input
+                ref={commentInputRef}
+                type="text"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendComment()}
+                placeholder="Add a comment..."
+                style={{ flex: 1, padding: '10px 0', border: 'none', fontSize: '0.9rem', outline: 'none', background: 'transparent', color: '#262626' }}
+              />
+              <button
+                onClick={handleSendComment}
+                disabled={sendingComment || !commentText.trim()}
+                style={{ background: 'none', border: 'none', color: commentText.trim() ? '#0095F6' : '#B3DBFF', fontSize: '0.9rem', fontWeight: 700, cursor: commentText.trim() ? 'pointer' : 'default', padding: '4px 0', transition: 'color 0.2s', whiteSpace: 'nowrap' }}
+              >
+                {sendingComment ? '...' : 'Post'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   )
 }

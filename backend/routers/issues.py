@@ -5,7 +5,7 @@ POST /api/submit-issue   — full submit: duplicate check → save to Firestore 
 """
 import math
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from services.firebase_service import get_db, is_initialized
@@ -90,26 +90,28 @@ def find_duplicate(issue_type: str, lat: float, lng: float, radius_meters: float
     """
     db = get_db()
     departments = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"]
+    types = ["user_issue", "dummy_issue"]
 
     for dept in departments:
-        query = (
-            db.collection_group(dept)
-            .where("issue_type", "==", issue_type)
-            .where("status", "in", ["open", "in_progress"])
-            .limit(50)
-        )
+        for t in types:
+            query = (
+                db.collection("issues").document(t).collection(dept)
+                .where("issue_type", "==", issue_type)
+                .where("status", "in", ["open", "in_progress"])
+                .limit(50)
+            )
 
-        docs = query.stream()
-        for doc in docs:
-            data = doc.to_dict()
-            loc = data.get("location", {})
-            existing_lat = loc.get("lat")
-            existing_lng = loc.get("lng")
-            if existing_lat is None or existing_lng is None:
-                continue
-            dist = haversine_meters(lat, lng, existing_lat, existing_lng)
-            if dist <= radius_meters:
-                return {"id": doc.id, "ref": doc.reference, **data}
+            docs = query.stream()
+            for doc in docs:
+                data = doc.to_dict()
+                loc = data.get("location", {})
+                existing_lat = loc.get("lat")
+                existing_lng = loc.get("lng")
+                if existing_lat is None or existing_lng is None:
+                    continue
+                dist = haversine_meters(lat, lng, existing_lat, existing_lng)
+                if dist <= radius_meters:
+                    return {"id": doc.id, "ref": doc.reference, **data}
 
     return None
 
@@ -196,7 +198,7 @@ async def submit_issue(req: SubmitIssueRequest):
         )
 
     # Prepare document
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     doc_data = {
         "title": req.title,
         "description": req.description,
@@ -244,13 +246,15 @@ def process_escalations() -> dict:
     from datetime import datetime, timezone
     db = get_db()
     departments = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"]
+    types = ["user_issue", "dummy_issue"]
     
-    all_docs = []
+    all_docs: list[Any] = []
     for dept in departments:
-        group_ref = db.collection_group(dept)
-        open_docs = list(group_ref.where("status", "==", "open").stream())
-        prog_docs = list(group_ref.where("status", "==", "in_progress").stream())
-        all_docs.extend(open_docs + prog_docs)
+        for t in types:
+            group_ref = db.collection("issues").document(t).collection(dept)
+            open_docs: list[Any] = list(group_ref.where("status", "==", "open").stream())
+            prog_docs: list[Any] = list(group_ref.where("status", "==", "in_progress").stream())
+            all_docs.extend(open_docs + prog_docs)
     
     now = datetime.now(timezone.utc)
     processed = 0
@@ -265,7 +269,7 @@ def process_escalations() -> dict:
     
     for doc in all_docs:
         processed += 1
-        data = doc.to_dict()
+        data = doc.to_dict() or {}
         created_at = data.get("created_at")
         if not created_at:
             continue
@@ -359,11 +363,16 @@ async def verify_resolution(req: VerifyResolutionRequest):
     
     # We must find the issue document reference since the ID alone is not enough to locate the path
     departments = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"]
+    types = ["user_issue", "dummy_issue"]
     issue_doc = None
     for dept in departments:
-        docs = list(db.collection_group(dept).where("__name__", "==", req.issue_id).stream())
-        if docs:
-            issue_doc = docs[0]
+        for t in types:
+            ref = db.collection("issues").document(t).collection(dept).document(req.issue_id)
+            doc_snap = ref.get()
+            if doc_snap.exists:
+                issue_doc = doc_snap
+                break
+        if issue_doc:
             break
             
     if not issue_doc:

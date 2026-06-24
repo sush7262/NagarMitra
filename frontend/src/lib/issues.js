@@ -87,24 +87,28 @@ function docToIssue(snap) {
 
 export function subscribeToAllIssues(callback, onError) {
   const depts = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"];
+  const types = ["user_issue", "dummy_issue"];
   const unsubs = [];
   const state = {};
   let initializedCount = 0;
   
   depts.forEach(dept => {
-    unsubs.push(onSnapshot(collectionGroup(db, dept), (snapshot) => {
-      snapshot.docChanges().forEach(change => {
-        if (change.type === 'removed') {
-          delete state[change.doc.id];
-        } else {
-          state[change.doc.id] = docToIssue(change.doc);
+    types.forEach(type => {
+      const colRef = collection(db, 'issues', type, dept);
+      unsubs.push(onSnapshot(colRef, (snapshot) => {
+        snapshot.docChanges().forEach(change => {
+          if (change.type === 'removed') {
+            delete state[change.doc.id];
+          } else {
+            state[change.doc.id] = docToIssue(change.doc);
+          }
+        });
+        initializedCount++;
+        if (initializedCount >= depts.length * types.length) {
+          callback(Object.values(state));
         }
-      });
-      initializedCount++;
-      if (initializedCount >= depts.length) {
-        callback(Object.values(state));
-      }
-    }, onError));
+      }, onError));
+    });
   });
   
   return () => unsubs.forEach(u => u());
@@ -112,20 +116,23 @@ export function subscribeToAllIssues(callback, onError) {
 
 export function subscribeToUserIssues(uid, callback, onError) {
   const depts = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"];
+  const types = ["user_issue", "dummy_issue"];
   const unsubs = [];
   const state = {};
   let initializedCount = 0;
   
   depts.forEach(dept => {
-    const q = query(collectionGroup(db, dept), where("reporter_uid", "==", uid));
-    unsubs.push(onSnapshot(q, (snapshot) => {
-      snapshot.docChanges().forEach(change => {
-        if (change.type === 'removed') delete state[change.doc.id];
-        else state[change.doc.id] = docToIssue(change.doc);
-      });
-      initializedCount++;
-      if (initializedCount >= depts.length) callback(Object.values(state));
-    }, onError));
+    types.forEach(type => {
+      const q = query(collection(db, 'issues', type, dept), where("reporter_uid", "==", uid));
+      unsubs.push(onSnapshot(q, (snapshot) => {
+        snapshot.docChanges().forEach(change => {
+          if (change.type === 'removed') delete state[change.doc.id];
+          else state[change.doc.id] = docToIssue(change.doc);
+        });
+        initializedCount++;
+        if (initializedCount >= depts.length * types.length) callback(Object.values(state));
+      }, onError));
+    });
   });
   return () => unsubs.forEach(u => u());
 }
@@ -139,20 +146,26 @@ export function subscribeToIssues(callback, onError) {
 
 export async function fetchIssueById(issueId) {
   const depts = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"];
+  const types = ["user_issue", "dummy_issue"];
   for (const dept of depts) {
-    const q = query(collectionGroup(db, dept), where("issue_id", "==", issueId));
-    const snap = await getDocs(q);
-    if (!snap.empty) return docToIssue(snap.docs[0]);
+    for (const type of types) {
+      const ref = doc(db, 'issues', type, dept, issueId);
+      const snap = await getDoc(ref);
+      if (snap.exists()) return docToIssue(snap);
+    }
   }
   return null;
 }
 
 export async function getIssueRefById(issueId) {
   const depts = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"];
+  const types = ["user_issue", "dummy_issue"];
   for (const dept of depts) {
-    const q = query(collectionGroup(db, dept), where("issue_id", "==", issueId));
-    const snap = await getDocs(q);
-    if (!snap.empty) return snap.docs[0].ref;
+    for (const type of types) {
+      const ref = doc(db, 'issues', type, dept, issueId);
+      const snap = await getDoc(ref);
+      if (snap.exists()) return ref;
+    }
   }
   throw new Error("Issue not found");
 }
@@ -163,15 +176,18 @@ export async function getIssueRefById(issueId) {
 
 async function findDuplicateClient(issueType, lat, lng) {
   const depts = ["PWD", "Jal Board", "Electricity Board", "Municipal", "Other"];
+  const types = ["user_issue", "dummy_issue"];
   for (const dept of depts) {
-    const q = query(collectionGroup(db, dept), where('issue_type', '==', issueType), where('status', 'in', ['open', 'in_progress']));
-    const snapshot = await getDocs(q);
-    for (const docSnap of snapshot.docs) {
-      const data = docSnap.data();
-      const loc = data.location || {};
-      if (loc.lat == null || loc.lng == null) continue;
-      if (haversineMeters(lat, lng, loc.lat, loc.lng) <= RADIUS_METERS) {
-        return { id: docSnap.id, path: docSnap.ref.path, ...data };
+    for (const type of types) {
+      const q = query(collection(db, 'issues', type, dept), where('issue_type', '==', issueType), where('status', 'in', ['open', 'in_progress']));
+      const snapshot = await getDocs(q);
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const loc = data.location || {};
+        if (loc.lat == null || loc.lng == null) continue;
+        if (haversineMeters(lat, lng, loc.lat, loc.lng) <= RADIUS_METERS) {
+          return { id: docSnap.id, path: docSnap.ref.path, ...data };
+        }
       }
     }
   }
@@ -450,6 +466,10 @@ export async function addComment(issueId, user, text) {
     user_uid: user.uid,
     user_name: user.displayName || 'Citizen',
     created_at: serverTimestamp()
+  })
+  // Update comment count on the issue document
+  await updateDoc(issueRef, {
+    comment_count: increment(1)
   })
 }
 

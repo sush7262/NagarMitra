@@ -134,32 +134,27 @@ export default function IssueDetail() {
 
   const handleOfficerResolve = async () => {
     if (!afterPhoto) return
-    setIsResolving(true)
-    try {
-      await resolveIssueByOfficer(issue.id, user, userProfile, afterPhoto)
-      setIssue(prev => ({ ...prev, status: 'resolved' }))
-    } catch (err) {
-      console.error(err)
-      setError('Failed to mark as resolved: ' + err.message)
-    } finally {
-      setIsResolving(false)
-    }
-  }
-
-  const handleAIVerification = async () => {
-    setIsVerifying(true)
     setError('')
     try {
+      setIsResolving(true)
+      await resolveIssueByOfficer(issue.id, user, userProfile, afterPhoto)
+      setIsResolving(false)
+      
+      setIsVerifying(true)
       const res = await triggerAIVerification(issue.id)
-      // We don't necessarily update issue.status directly, we rely on Firebase snapshot to update it if the backend changed it.
-      // But we can trigger a refetch or rely on live listeners if we had them for the issue document.
-      // Since fetchIssueById is one-time in useEffect, let's fetch it again to get the latest status.
+      
       const updated = await fetchIssueById(issue.id)
       setIssue(updated)
-      alert(`AI Verdict: ${res.verdict}\n\n${res.explanation}`)
+      
+      if (res.verdict === 'REJECT') {
+        alert(`⚠️ Warning: AI Verification Failed\n\n${res.explanation}\n\nThe issue has been marked as Disputed.`)
+      } else {
+        alert(`✅ AI Verification Passed!\n\nIssue successfully marked as Resolved.`)
+      }
     } catch (err) {
       console.error(err)
-      setError('AI Verification Failed: ' + err.message)
+      setError('Failed to resolve issue: ' + err.message)
+      setIsResolving(false)
     } finally {
       setIsVerifying(false)
     }
@@ -315,31 +310,15 @@ export default function IssueDetail() {
               </div>
               <button 
                 className="btn btn-primary" 
-                style={{ width: '100%' }} 
-                disabled={!afterPhoto || isResolving}
+                style={{ width: '100%', background: isVerifying ? '#7C3AED' : undefined }} 
+                disabled={!afterPhoto || isResolving || isVerifying}
                 onClick={handleOfficerResolve}
               >
-                {isResolving ? 'Resolving...' : '✅ Mark as Resolved'}
-              </button>
-            </div>
-          )}
-
-          {/* AI Verification Tool (for Testing & Admins) */}
-          {userProfile?.is_officer === true && (issue.status === 'resolved' || issue.status === 'disputed') && (
-            <div className="card" style={{ padding: '16px', marginBottom: 16, border: '1px dashed #7C3AED', background: '#F5F3FF' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: 8, color: '#6D28D9' }}>
-                🤖 Task 4.3: AI Verification Agent
-              </div>
-              <p style={{ fontSize: '0.8125rem', color: '#5B21B6', marginBottom: 12 }}>
-                Trigger Gemini Vision to compare before & after photos and detect fake closures.
-              </p>
-              <button 
-                className="btn btn-primary" 
-                style={{ width: '100%', background: '#7C3AED' }} 
-                disabled={isVerifying}
-                onClick={handleAIVerification}
-              >
-                {isVerifying ? 'Running AI Vision Analysis...' : '🔍 Run AI Verification'}
+                {isVerifying ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> Analyzing with AI Vision...
+                  </div>
+                ) : isResolving ? 'Uploading Photo...' : '✅ Mark as Resolved'}
               </button>
             </div>
           )}

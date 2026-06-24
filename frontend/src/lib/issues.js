@@ -52,9 +52,17 @@ export function formatTimeAgo(timestamp) {
 
 export function sortBySeverity(issues) {
   return [...issues].sort((a, b) => {
+    // 1. Prioritize real user issues over dummy issues
+    const aIsReal = a.path?.includes('user_issue') ? 1 : 0
+    const bIsReal = b.path?.includes('user_issue') ? 1 : 0
+    if (aIsReal !== bIsReal) return bIsReal - aIsReal
+
+    // 2. Sort by Severity
     const sa = SEVERITY_ORDER[a.severity_label] ?? 99
     const sb = SEVERITY_ORDER[b.severity_label] ?? 99
     if (sa !== sb) return sa - sb
+
+    // 3. Sort by Severity Score
     return (b.severity_score ?? 0) - (a.severity_score ?? 0)
   })
 }

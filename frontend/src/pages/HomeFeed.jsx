@@ -452,8 +452,15 @@ export default function HomeFeed() {
                         {issue.severity_label || 'High'}
                       </div>
 
-                      <div style={{ padding: '4px 10px', borderRadius: '8px', background: '#FEE2E2', color: '#B91C1C', fontSize: '0.8125rem', fontWeight: '600' }}>
-                        Status: {issue.status === 'in_progress' ? 'In Progress' : issue.status === 'resolved' ? 'Resolved' : 'Pending'}
+                      <div style={{
+                        padding: '4px 10px',
+                        borderRadius: '8px',
+                        background: (issue.status === 'resolved' || issue.status === 'verified_resolved') ? '#DCFCE7' : issue.status === 'in_progress' ? '#FEF3C7' : '#FEE2E2',
+                        color: (issue.status === 'resolved' || issue.status === 'verified_resolved') ? '#16A34A' : issue.status === 'in_progress' ? '#D97706' : '#B91C1C',
+                        fontSize: '0.8125rem',
+                        fontWeight: '600'
+                      }}>
+                        Status: {statusLabel(issue.status) || 'Pending'}
                       </div>
                     </div>
                   </div>
